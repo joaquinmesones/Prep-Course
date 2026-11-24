@@ -20,12 +20,12 @@ python3 reelia_fotos.py --datos propiedad.json --guion
 python3 reelia_fotos.py --fotos fotos/ --datos propiedad.json --salida propiedad.mp4 \
     --voz voz.mp3 --musica musica.mp3
 ```
-Datos: ver `propiedad.ejemplo.json`. El campo `orden` permite fijar el orden de las fotos (lo completa el Curador de fotos); si está vacío se usan en orden alfabético.
+Datos: ver `propiedad.ejemplo.json`. El campo `tomas` fija el orden de las fotos y la etiqueta que aparece en cada una (lo completa el Curador de fotos); si no está, se usan en orden alfabético con etiquetas armadas desde los datos. Si no hay `precio`, la portada muestra "Consultá el precio". La voz en off es opcional.
 
 Requiere `ffmpeg` y `Pillow`.
 
 ## Pendiente
-- Voz en off con acento argentino: conectar un proveedor de voz (ElevenLabs o Azure, voces `es-AR`).
+- Voz en off opcional con acento argentino: conectar ElevenLabs (más adelante).
 - Curador automático: clasificar fotos por ambiente y ordenar el recorrido con IA.
 - Biblioteca de música libre de derechos.
 - Exportar también 4:5 (feed) y versiones de 15 / 30 / 60 s.

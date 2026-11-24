@@ -138,6 +138,8 @@ def placa_portada(d, marca):
     precio = formatear_precio(d)
     if precio:
         dr.text((80, 1350), precio, font=fuente(FUENTE_BOLD, 112), fill="white")
+    else:
+        dr.text((80, 1370), "Consultá el precio", font=fuente(FUENTE_BOLD, 92), fill="white")
     if d.get("ubicacion"):
         dr.text((84, 1500), d["ubicacion"], font=fuente(FUENTE_SEMI, 54), fill=(235, 235, 235))
     if d.get("tipo"):
@@ -350,7 +352,11 @@ def main():
 
     fotos = sorted(os.path.join(a.fotos, x) for x in os.listdir(a.fotos)
                    if x.lower().endswith(EXTENSIONES))
-    if d.get("orden"):  # orden explícito definido por el Curador de fotos
+    etiquetas_fijas = None
+    if d.get("tomas"):  # orden + etiqueta por foto definidos por el Curador de fotos
+        fotos = [os.path.join(a.fotos, t["foto"]) for t in d["tomas"]]
+        etiquetas_fijas = [t.get("etiqueta") for t in d["tomas"]]
+    elif d.get("orden"):  # solo orden explícito
         fotos = [os.path.join(a.fotos, x) for x in d["orden"]]
     fotos = fotos[:a.max_fotos]
     if not fotos:
@@ -375,6 +381,10 @@ def main():
             if i == 0:
                 ov = os.path.join(tmp, f"ov_{i}.png")
                 placa_portada(d, marca).save(ov)
+            elif etiquetas_fijas is not None:
+                if etiquetas_fijas[i]:
+                    ov = os.path.join(tmp, f"ov_{i}.png")
+                    placa_dato(etiquetas_fijas[i], marca).save(ov)
             elif i - 1 < len(etiquetas):
                 ov = os.path.join(tmp, f"ov_{i}.png")
                 placa_dato(etiquetas[i - 1], marca).save(ov)
