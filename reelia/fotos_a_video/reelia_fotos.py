@@ -366,7 +366,7 @@ def main():
     if not fotos:
         raise SystemExit("No encontré fotos en la carpeta.")
 
-    marca = hex_a_rgb(d.get("color_marca", "#E4572E"))
+    marca = hex_a_rgb(d.get("color_marca", "#F40009"))
     tmp = tempfile.mkdtemp(prefix="reelia_")
     try:
         etiquetas = datos_por_toma(d)

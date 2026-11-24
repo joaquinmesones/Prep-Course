@@ -277,6 +277,8 @@ def nuevo():
         if ultimo:  # recordamos los datos de la inmobiliaria del último video
             d = json.loads(ultimo["datos"])
             marca = {k: d.get(k) for k in ("inmobiliaria", "asesor", "whatsapp", "color_marca")}
+            if (marca.get("color_marca") or "").upper() == "#C8742B":  # color viejo por defecto
+                marca["color_marca"] = None
         return render_template("nuevo.html", marca=marca)
 
     f = request.form
@@ -319,7 +321,7 @@ def nuevo():
         "inmobiliaria": f.get("inmobiliaria", "").strip(),
         "asesor": f.get("asesor", "").strip(),
         "whatsapp": f.get("whatsapp", "").strip(),
-        "color_marca": f.get("color_marca", "#C8742B"),
+        "color_marca": f.get("color_marca", "#F40009"),
         "tomas": tomas,
     }
     if logo and logo.filename:
