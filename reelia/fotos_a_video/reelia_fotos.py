@@ -1,0 +1,407 @@
+#!/usr/bin/env python3
+"""
+Reelia — Modo 2: Fotos a video (propiedades).
+
+Toma una carpeta de fotos de una propiedad + un archivo propiedad.json con los
+datos y arma un video vertical (1080x1920) listo para Reels / Historias:
+
+  - Cada foto con movimiento (zoom suave o paneo tipo recorrido).
+  - Transiciones suaves entre fotos.
+  - Datos de la propiedad en pantalla (precio, ubicación, ambientes, m², etc.).
+  - Cierre con inmobiliaria, asesor, WhatsApp y llamado a la acción.
+  - Voz en off (opcional en este prototipo: se pasa un .mp3 con --voz) y música
+    de fondo (--musica). Si hay voz, la música baja automáticamente debajo.
+
+Uso:
+  python3 reelia_fotos.py --fotos carpeta/ --datos propiedad.json --salida video.mp4 \
+      [--voz voz.mp3] [--musica musica.mp3] [--segundos-por-foto 3.2]
+
+  python3 reelia_fotos.py --datos propiedad.json --guion
+      -> imprime el guion de la voz en off generado a partir de los datos.
+
+Requiere: ffmpeg, Pillow.
+"""
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
+
+W, H = 1080, 1920
+FPS = 30
+TRANSICION = 0.6  # segundos de fundido entre tomas
+
+FUENTE_BOLD = "/usr/share/fonts/opentype/inter/Inter-Bold.otf"
+FUENTE_SEMI = "/usr/share/fonts/opentype/inter/Inter-SemiBold.otf"
+FUENTE_REG = "/usr/share/fonts/opentype/inter/Inter-Regular.otf"
+EXTENSIONES = (".jpg", ".jpeg", ".png", ".webp")
+
+
+# ----------------------------------------------------------------- utilidades
+def fuente(ruta, tam):
+    try:
+        return ImageFont.truetype(ruta, tam)
+    except OSError:
+        return ImageFont.truetype("DejaVuSans-Bold.ttf", tam)
+
+
+def run(cmd):
+    r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if r.returncode != 0:
+        sys.stderr.write(r.stderr[-3000:])
+        raise SystemExit(f"Falló: {' '.join(cmd[:6])} ...")
+    return r.stdout
+
+
+def duracion(ruta):
+    out = run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+               "-of", "default=nw=1:nk=1", ruta])
+    return float(out.strip())
+
+
+def hex_a_rgb(h):
+    h = h.lstrip("#")
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def formatear_precio(d):
+    precio = d.get("precio")
+    if precio is None:
+        return None
+    if isinstance(precio, (int, float)):
+        precio = f"{int(precio):,}".replace(",", ".")
+    moneda = d.get("moneda", "USD")
+    return f"{moneda} {precio}"
+
+
+# ------------------------------------------------------------ guion de la voz
+def generar_guion(d):
+    """Guion corto en español rioplatense a partir de los datos."""
+    partes = []
+    op = d.get("operacion", "venta").lower()
+    tipo = d.get("tipo", "propiedad")
+    zona = d.get("ubicacion", "")
+    femeninos = ("casa", "propiedad", "oficina", "quinta", "cabaña", "chacra")
+    art = "esta" if tipo.lower().split()[0] in femeninos else "este"
+    partes.append(f"¡Mirá {art} {tipo} en {op} en {zona}!" if zona else f"¡Mirá {art} {tipo} en {op}!")
+
+    detalles = []
+    if d.get("ambientes"):
+        detalles.append(f"{d['ambientes']} ambientes")
+    if d.get("dormitorios"):
+        detalles.append(f"{d['dormitorios']} dormitorios")
+    if d.get("banos"):
+        n = d["banos"]
+        detalles.append(f"{n} baño" if n == 1 else f"{n} baños")
+    if d.get("m2_totales"):
+        detalles.append(f"{d['m2_totales']} metros cuadrados")
+    if detalles:
+        partes.append("Tiene " + ", ".join(detalles[:-1]) +
+                      (f" y {detalles[-1]}." if len(detalles) > 1 else f"{detalles[0]}."))
+
+    if d.get("destacados"):
+        partes.append(" ".join(d["destacados"][:2]))
+    if d.get("cochera"):
+        partes.append("Además, cuenta con cochera.")
+    precio = formatear_precio(d)
+    if precio:
+        moneda, monto = precio.split(" ", 1)
+        nombre = {"USD": "dólares", "U$S": "dólares", "ARS": "pesos", "$": "pesos"}.get(moneda, moneda)
+        partes.append(f"Su valor es de {monto} {nombre}.")
+    partes.append(d.get("cta", "Escribinos por WhatsApp y coordiná tu visita."))
+    return " ".join(partes).replace("  ", " ")
+
+
+# ----------------------------------------------------------- placas de texto
+def placa_portada(d, marca):
+    """Overlay transparente para la primera foto: operación, precio, ubicación."""
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    dr = ImageDraw.Draw(img)
+    # degradé inferior para legibilidad
+    grad = Image.new("L", (1, H))
+    for y in range(H):
+        grad.putpixel((0, y), int(max(0, (y - H * 0.45) / (H * 0.55)) * 210))
+    img.paste(Image.new("RGBA", (W, H), (0, 0, 0, 255)), (0, 0), grad.resize((W, H)))
+    dr = ImageDraw.Draw(img)
+
+    op = d.get("operacion", "Venta").upper()
+    f_chip = fuente(FUENTE_BOLD, 44)
+    tw = dr.textlength(op, font=f_chip)
+    x, y = 80, 1240
+    dr.rounded_rectangle((x, y, x + tw + 60, y + 84), radius=42, fill=marca + (255,))
+    dr.text((x + 30, y + 16), op, font=f_chip, fill="white")
+
+    precio = formatear_precio(d)
+    if precio:
+        dr.text((80, 1350), precio, font=fuente(FUENTE_BOLD, 112), fill="white")
+    if d.get("ubicacion"):
+        dr.text((84, 1500), d["ubicacion"], font=fuente(FUENTE_SEMI, 54), fill=(235, 235, 235))
+    if d.get("tipo"):
+        dr.text((84, 1575), d["tipo"].capitalize(), font=fuente(FUENTE_REG, 46), fill=(210, 210, 210))
+    return img
+
+
+def placa_dato(texto, marca):
+    """Etiqueta flotante inferior (ej: '3 ambientes · 85 m²')."""
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    dr = ImageDraw.Draw(img)
+    f = fuente(FUENTE_BOLD, 58)
+    tw = dr.textlength(texto, font=f)
+    x0 = (W - tw) / 2 - 48
+    y0 = 1560
+    dr.rounded_rectangle((x0 + 6, y0 + 8, x0 + tw + 102, y0 + 128), radius=30, fill=(0, 0, 0, 90))
+    dr.rounded_rectangle((x0, y0, x0 + tw + 96, y0 + 120), radius=30, fill=(255, 255, 255, 240))
+    dr.rectangle((x0, y0 + 20, x0 + 10, y0 + 100), fill=marca + (255,))
+    dr.text((x0 + 48, y0 + 26), texto, font=f, fill=(20, 20, 20))
+    return img
+
+
+def placa_cierre(d, marca, fondo):
+    """Placa final opaca con CTA, inmobiliaria, asesor y WhatsApp."""
+    base = ImageOps.fit(fondo.convert("RGB"), (W, H)).filter(ImageFilter.GaussianBlur(28))
+    base = Image.blend(base, Image.new("RGB", (W, H), (10, 10, 14)), 0.62).convert("RGBA")
+    dr = ImageDraw.Draw(base)
+
+    def centrado(txt, y, f, color):
+        tw = dr.textlength(txt, font=f)
+        dr.text(((W - tw) / 2, y), txt, font=f, fill=color)
+
+    y = 560
+    logo = d.get("logo")
+    if logo and os.path.exists(logo):
+        lg = Image.open(logo).convert("RGBA")
+        lg.thumbnail((520, 260))
+        base.alpha_composite(lg, ((W - lg.width) // 2, 420))
+        y = 420 + lg.height + 80
+    elif d.get("inmobiliaria"):
+        centrado(d["inmobiliaria"], y, fuente(FUENTE_BOLD, 76), "white")
+        y += 150
+
+    cta = d.get("cta_corto", "¿Querés conocerla?")
+    centrado(cta, y, fuente(FUENTE_BOLD, 80), "white")
+    y += 120
+    centrado("Coordiná tu visita", y, fuente(FUENTE_REG, 52), (220, 220, 220))
+    y += 150
+
+    if d.get("whatsapp"):
+        f = fuente(FUENTE_BOLD, 60)
+        txt = f"WhatsApp  {d['whatsapp']}"
+        tw = dr.textlength(txt, font=f)
+        x0 = (W - tw) / 2 - 50
+        dr.rounded_rectangle((x0, y, x0 + tw + 100, y + 130), radius=65, fill=(37, 211, 102, 255))
+        dr.text((x0 + 50, y + 30), txt, font=f, fill="white")
+        y += 220
+    if d.get("asesor"):
+        centrado(d["asesor"], y, fuente(FUENTE_SEMI, 54), "white")
+        y += 80
+    if d.get("inmobiliaria") and logo and os.path.exists(logo):
+        centrado(d["inmobiliaria"], y, fuente(FUENTE_REG, 46), (200, 200, 200))
+    dr.rectangle((0, H - 18, W, H), fill=marca + (255,))
+    return base
+
+
+def datos_por_toma(d):
+    """Lista de etiquetas que se van mostrando sobre las fotos siguientes."""
+    et = []
+    amb = []
+    if d.get("ambientes"):
+        amb.append(f"{d['ambientes']} ambientes")
+    if d.get("m2_totales"):
+        amb.append(f"{d['m2_totales']} m²")
+    if amb:
+        et.append(" · ".join(amb))
+    dorm = []
+    if d.get("dormitorios"):
+        dorm.append(f"{d['dormitorios']} dorm.")
+    if d.get("banos"):
+        dorm.append(f"{d['banos']} baño{'s' if d['banos'] != 1 else ''}")
+    if dorm:
+        et.append(" · ".join(dorm))
+    if d.get("cochera"):
+        et.append("Cochera")
+    et.extend(d.get("destacados_cortos", []))
+    return et
+
+
+# ------------------------------------------------------------- tomas animadas
+def preparar_foto(ruta, destino):
+    """Normaliza la foto: orientación EXIF, RGB, leve mejora de contraste."""
+    im = ImageOps.exif_transpose(Image.open(ruta)).convert("RGB")
+    im = ImageOps.autocontrast(im, cutoff=0.5)
+    im.save(destino, quality=95)
+    return im.size
+
+
+def render_toma(foto, overlay_png, seg, idx, salida):
+    """Una toma: foto con movimiento + overlay de texto con fundido."""
+    with Image.open(foto) as im:
+        ancho, alto = im.size
+    n = int(seg * FPS)
+    horizontal = ancho / alto > 0.75  # casi todas las fotos de propiedades
+
+    if horizontal:
+        # Fondo desenfocado + foto llenando el alto con paneo lateral (recorrido)
+        # o zoom lento, alternando para dar variedad.
+        escala_h = int(H * 1.08)
+        escala_w = int(ancho * escala_h / alto)
+        if idx % 2 == 0 and escala_w > W * 1.3:
+            direc = "(iw-ow)*on/{n}" if idx % 4 == 0 else "(iw-ow)*(1-on/{n})"
+            mov = (f"scale={escala_w}:{escala_h},"
+                   f"crop={W}:{H}:x='{direc.format(n=n)}':y='(ih-oh)/2'")
+            # crop no conoce 'on'; usamos 't' en segundos
+            mov = mov.replace("on/" + str(n), f"t/{seg}")
+        else:
+            z_ini, z_fin = (1.0, 1.12) if idx % 4 in (1, 2) else (1.12, 1.0)
+            mov = (f"scale=-2:{H * 2},"
+                   f"zoompan=z='{z_ini}+({z_fin}-{z_ini})*on/{n}':"
+                   f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={n}:s={W}x{H}:fps={FPS}")
+    else:
+        z_ini, z_fin = (1.0, 1.1) if idx % 2 == 0 else (1.1, 1.0)
+        mov = (f"scale={W * 2}:{H * 2}:force_original_aspect_ratio=increase,crop={W * 2}:{H * 2},"
+               f"zoompan=z='{z_ini}+({z_fin}-{z_ini})*on/{n}':"
+               f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={n}:s={W}x{H}:fps={FPS}")
+
+    filtros = f"[0:v]{mov},setsar=1,fps={FPS},format=yuv420p[v0]"
+    entradas = ["-loop", "1", "-t", f"{seg}", "-i", foto]
+    if overlay_png:
+        entradas += ["-loop", "1", "-t", f"{seg}", "-i", overlay_png]
+        filtros += (f";[1:v]format=rgba,fade=in:st=0.35:d=0.45:alpha=1[o];"
+                    f"[v0][o]overlay=0:0:format=auto,format=yuv420p[v]")
+        mapa = "[v]"
+    else:
+        mapa = "[v0]"
+    run(["ffmpeg", "-y", "-v", "error", *entradas, "-filter_complex", filtros,
+         "-map", mapa, "-t", f"{seg}", "-r", str(FPS), "-c:v", "libx264",
+         "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p", salida])
+
+
+def unir_con_transiciones(tomas, segs, salida):
+    entradas = []
+    for t in tomas:
+        entradas += ["-i", t]
+    partes = []
+    ultimo = "[0:v]"
+    offset = 0.0
+    for i in range(1, len(tomas)):
+        offset += segs[i - 1] - TRANSICION
+        etiqueta = f"[x{i}]"
+        partes.append(f"{ultimo}[{i}:v]xfade=transition=fade:duration={TRANSICION}:"
+                      f"offset={offset:.3f}{etiqueta}")
+        ultimo = etiqueta
+    if not partes:
+        shutil.copy(tomas[0], salida)
+        return
+    run(["ffmpeg", "-y", "-v", "error", *entradas, "-filter_complex", ";".join(partes),
+         "-map", ultimo, "-c:v", "libx264", "-preset", "medium", "-crf", "20",
+         "-pix_fmt", "yuv420p", "-movflags", "+faststart", salida])
+
+
+def mezclar_audio(video, voz, musica, salida):
+    dur = duracion(video)
+    if not voz and not musica:
+        shutil.copy(video, salida)
+        return
+    entradas = ["-i", video]
+    filtros = []
+    if voz:
+        entradas += ["-i", voz]
+    if musica:
+        entradas += ["-stream_loop", "-1", "-i", musica]
+    iv = 1 if voz else None
+    im = (2 if voz else 1) if musica else None
+    if voz:
+        filtros.append(f"[{iv}:a]adelay=400|400,loudnorm=I=-16:TP=-1.5,apad[voz]")
+    if musica:
+        filtros.append(f"[{im}:a]volume={'0.12' if voz else '0.6'},"
+                       f"afade=t=out:st={max(0, dur - 1.5):.2f}:d=1.5[mus]")
+    if voz and musica:
+        filtros.append("[voz][mus]amix=inputs=2:duration=longest:normalize=0[a]")
+    else:
+        filtros.append(f"[{'voz' if voz else 'mus'}]anull[a]")
+    run(["ffmpeg", "-y", "-v", "error", *entradas, "-filter_complex", ";".join(filtros),
+         "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+         "-t", f"{dur:.3f}", "-movflags", "+faststart", salida])
+
+
+# ----------------------------------------------------------------------- main
+def main():
+    ap = argparse.ArgumentParser(description="Reelia — fotos de propiedad a video")
+    ap.add_argument("--fotos", help="carpeta con las fotos (se usan en orden alfabético)")
+    ap.add_argument("--datos", required=True, help="propiedad.json")
+    ap.add_argument("--salida", default="reelia_propiedad.mp4")
+    ap.add_argument("--voz", help="mp3/wav con la voz en off")
+    ap.add_argument("--musica", help="mp3/wav con la música de fondo")
+    ap.add_argument("--segundos-por-foto", type=float, default=3.2)
+    ap.add_argument("--max-fotos", type=int, default=12)
+    ap.add_argument("--guion", action="store_true", help="solo imprimir el guion de la voz")
+    a = ap.parse_args()
+
+    with open(a.datos, encoding="utf-8") as f:
+        d = json.load(f)
+    if a.guion:
+        print(generar_guion(d))
+        return
+    if not a.fotos:
+        ap.error("--fotos es obligatorio para generar el video")
+
+    fotos = sorted(os.path.join(a.fotos, x) for x in os.listdir(a.fotos)
+                   if x.lower().endswith(EXTENSIONES))
+    if d.get("orden"):  # orden explícito definido por el Curador de fotos
+        fotos = [os.path.join(a.fotos, x) for x in d["orden"]]
+    fotos = fotos[:a.max_fotos]
+    if not fotos:
+        raise SystemExit("No encontré fotos en la carpeta.")
+
+    marca = hex_a_rgb(d.get("color_marca", "#E4572E"))
+    tmp = tempfile.mkdtemp(prefix="reelia_")
+    try:
+        etiquetas = datos_por_toma(d)
+        tomas, segs = [], []
+        seg = a.segundos_por_foto
+        # si hay voz, estiramos las tomas para que el video dure lo mismo que la voz
+        if a.voz:
+            dur_voz = duracion(a.voz) + 1.2
+            total_fotos = dur_voz - 3.5 + TRANSICION * len(fotos)
+            seg = max(2.4, min(5.0, total_fotos / len(fotos)))
+
+        for i, foto in enumerate(fotos):
+            limpia = os.path.join(tmp, f"foto_{i:02d}.jpg")
+            preparar_foto(foto, limpia)
+            ov = None
+            if i == 0:
+                ov = os.path.join(tmp, f"ov_{i}.png")
+                placa_portada(d, marca).save(ov)
+            elif i - 1 < len(etiquetas):
+                ov = os.path.join(tmp, f"ov_{i}.png")
+                placa_dato(etiquetas[i - 1], marca).save(ov)
+            dur_toma = seg + (0.6 if i == 0 else 0)
+            out = os.path.join(tmp, f"toma_{i:02d}.mp4")
+            render_toma(limpia, ov, dur_toma, i, out)
+            tomas.append(out)
+            segs.append(dur_toma)
+            print(f"  toma {i + 1}/{len(fotos)} lista")
+
+        cierre_png = os.path.join(tmp, "cierre.png")
+        placa_cierre(d, marca, Image.open(fotos[0])).convert("RGB").save(cierre_png, quality=95)
+        cierre = os.path.join(tmp, "toma_cierre.mp4")
+        run(["ffmpeg", "-y", "-v", "error", "-loop", "1", "-t", "3.5", "-i", cierre_png,
+             "-vf", f"zoompan=z='1+0.03*on/{int(3.5 * FPS)}':x='iw/2-(iw/zoom/2)':"
+                    f"y='ih/2-(ih/zoom/2)':d={int(3.5 * FPS)}:s={W}x{H}:fps={FPS},format=yuv420p",
+             "-t", "3.5", "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", cierre])
+        tomas.append(cierre)
+        segs.append(3.5)
+
+        mudo = os.path.join(tmp, "mudo.mp4")
+        unir_con_transiciones(tomas, segs, mudo)
+        mezclar_audio(mudo, a.voz, a.musica, a.salida)
+        print(f"Listo: {a.salida} ({duracion(a.salida):.1f} s)")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    main()

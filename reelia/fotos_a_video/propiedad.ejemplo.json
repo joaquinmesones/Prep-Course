@@ -1,0 +1,20 @@
+{
+  "operacion": "Venta",
+  "tipo": "departamento",
+  "ubicacion": "Palermo, CABA",
+  "precio": 185000,
+  "moneda": "USD",
+  "ambientes": 3,
+  "dormitorios": 2,
+  "banos": 1,
+  "m2_totales": 78,
+  "cochera": true,
+  "destacados": ["Balcón con vista abierta y mucha luz natural."],
+  "destacados_cortos": ["Balcón aterrazado"],
+  "inmobiliaria": "Nombre de la inmobiliaria",
+  "asesor": "Nombre del asesor",
+  "whatsapp": "+54 9 11 0000-0000",
+  "logo": "logo.png",
+  "color_marca": "#1F6FEB",
+  "orden": []
+}
