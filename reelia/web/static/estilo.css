@@ -4,8 +4,8 @@
   --texto: #1d1a17;
   --suave: #6f6862;
   --borde: #e6e0d8;
-  --marca: #c8742b;
-  --marca-osc: #a85d1d;
+  --marca: #f40009;
+  --marca-osc: #c40007;
   --ok: #1f8a4c;
   --error: #c0392b;
   --radio: 14px;
@@ -14,7 +14,7 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --fondo: #141210; --tarjeta: #1e1b18; --texto: #f1ece6; --suave: #a59c93;
-    --borde: #34302b; --marca: #e08a3c; --marca-osc: #c8742b;
+    --borde: #34302b; --marca: #ff1f27; --marca-osc: #f40009;
     color-scheme: dark;
   }
 }
