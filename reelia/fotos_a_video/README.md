@@ -9,6 +9,7 @@ Convierte las fotos de una propiedad + sus datos en un video vertical (1080x1920
 - Etiquetas con los datos (ambientes, m², dormitorios, baños, cochera, destacados).
 - Cierre con inmobiliaria/logo, "¿Querés conocerla?", botón de WhatsApp y asesor.
 - Guion de voz en off en español rioplatense generado desde los datos (`--guion`).
+- Música original compuesta por Reelia (libre de derechos), en 3 estilos: `calido`, `moderno` y `sereno` (`reelia_musica.py`).
 - Mezcla de voz + música (la música baja sola cuando habla la voz) y el video se ajusta a la duración de la voz.
 
 ## Uso
@@ -18,14 +19,17 @@ python3 reelia_fotos.py --datos propiedad.json --guion
 
 # 2. Armar el video
 python3 reelia_fotos.py --fotos fotos/ --datos propiedad.json --salida propiedad.mp4 \
-    --voz voz.mp3 --musica musica.mp3
+    --estilo-musica calido          # o --musica tema.mp3, o --voz voz.mp3
+
+# Solo la música
+python3 reelia_musica.py --estilo moderno --segundos 30 --salida musica.mp3 --semilla 3
 ```
 Datos: ver `propiedad.ejemplo.json`. El campo `tomas` fija el orden de las fotos y la etiqueta que aparece en cada una (lo completa el Curador de fotos); si no está, se usan en orden alfabético con etiquetas armadas desde los datos. Si no hay `precio`, la portada muestra "Consultá el precio". La voz en off es opcional.
 
-Requiere `ffmpeg` y `Pillow`.
+Requiere `ffmpeg`, `Pillow`, `numpy` y `scipy`.
 
 ## Pendiente
 - Voz en off opcional con acento argentino: conectar ElevenLabs (más adelante).
 - Curador automático: clasificar fotos por ambiente y ordenar el recorrido con IA.
-- Biblioteca de música libre de derechos.
+- Sumar una biblioteca de temas con licencia comercial (ej. Pixabay Music) como alternativa a la música propia.
 - Exportar también 4:5 (feed) y versiones de 15 / 30 / 60 s.

@@ -14,7 +14,8 @@ datos y arma un video vertical (1080x1920) listo para Reels / Historias:
 
 Uso:
   python3 reelia_fotos.py --fotos carpeta/ --datos propiedad.json --salida video.mp4 \
-      [--voz voz.mp3] [--musica musica.mp3] [--segundos-por-foto 3.2]
+      [--voz voz.mp3] [--musica musica.mp3 | --estilo-musica calido|moderno|sereno|ninguno]
+      [--segundos-por-foto 3.2]
 
   python3 reelia_fotos.py --datos propiedad.json --guion
       -> imprime el guion de la voz en off generado a partir de los datos.
@@ -318,7 +319,7 @@ def mezclar_audio(video, voz, musica, salida):
     if voz:
         filtros.append(f"[{iv}:a]adelay=400|400,loudnorm=I=-16:TP=-1.5,apad[voz]")
     if musica:
-        filtros.append(f"[{im}:a]volume={'0.12' if voz else '0.6'},"
+        filtros.append(f"[{im}:a]loudnorm=I=-16:TP=-1.5,volume={'0.18' if voz else '1.0'},"
                        f"afade=t=out:st={max(0, dur - 1.5):.2f}:d=1.5[mus]")
     if voz and musica:
         filtros.append("[voz][mus]amix=inputs=2:duration=longest:normalize=0[a]")
@@ -337,6 +338,9 @@ def main():
     ap.add_argument("--salida", default="reelia_propiedad.mp4")
     ap.add_argument("--voz", help="mp3/wav con la voz en off")
     ap.add_argument("--musica", help="mp3/wav con la música de fondo")
+    ap.add_argument("--estilo-musica", choices=["calido", "moderno", "sereno", "ninguno"],
+                    default="calido",
+                    help="si no pasás --musica, Reelia compone una pista original en este estilo")
     ap.add_argument("--segundos-por-foto", type=float, default=3.2)
     ap.add_argument("--max-fotos", type=int, default=12)
     ap.add_argument("--guion", action="store_true", help="solo imprimir el guion de la voz")
@@ -407,7 +411,14 @@ def main():
 
         mudo = os.path.join(tmp, "mudo.mp4")
         unir_con_transiciones(tomas, segs, mudo)
-        mezclar_audio(mudo, a.voz, a.musica, a.salida)
+        musica = a.musica
+        if not musica and a.estilo_musica != "ninguno":
+            musica = os.path.join(tmp, "musica.mp3")
+            run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                              "reelia_musica.py"),
+                 "--estilo", a.estilo_musica, "--segundos", f"{duracion(mudo) + 0.5:.2f}",
+                 "--salida", musica])
+        mezclar_audio(mudo, a.voz, musica, a.salida)
         print(f"Listo: {a.salida} ({duracion(a.salida):.1f} s)")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
