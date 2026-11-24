@@ -1,12 +1,12 @@
 # Instalar Reelia en el VPS de Hostinger (KVM 1 con cPanel)
 
-Resultado: `https://reelia.TU-DOMINIO` con login. Solo entran usuarios creados por un administrador.
+Resultado: `https://videolabs.luciolopezfleming.com` con login. Solo entran usuarios creados por un administrador.
 
 > El KVM 1 tiene 1 CPU y 4 GB de RAM: alcanza para arrancar. Cada video tarda ~1 minuto y se procesan de a uno (los demás quedan "En cola").
 
 ## 1. Crear el subdominio
-cPanel → **Dominios** → **Crear un nuevo dominio** → `reelia.TU-DOMINIO`. Dejá activado AutoSSL (certificado HTTPS gratis).
-Si el DNS del dominio no está en este VPS, en hPanel → Dominios → DNS agregá un registro **A** `reelia` → `2.25.255.207`.
+cPanel → **Dominios** → **Crear un nuevo dominio** → `videolabs.luciolopezfleming.com`. Dejá activado AutoSSL (certificado HTTPS gratis).
+Si el DNS del dominio no está en este VPS, en hPanel → Dominios → DNS agregá un registro **A** `videolabs` → `2.25.255.207`.
 
 ## 2. Entrar por SSH como root
 hPanel → VPS → Administrar → **Acceso SSH**. Desde tu compu: `ssh root@2.25.255.207`
@@ -46,7 +46,7 @@ curl -I http://127.0.0.1:8765/login     # debe responder 200
 ## 6. Conectar el subdominio (Apache de cPanel)
 ```bash
 U=USUARIO_CPANEL            # dueño del dominio en cPanel
-D=reelia.TU-DOMINIO
+D=videolabs.luciolopezfleming.com
 for t in std ssl; do
   mkdir -p /etc/apache2/conf.d/userdata/$t/2_4/$U/$D
   cp /opt/reelia/reelia/web/despliegue/apache-proxy.conf /etc/apache2/conf.d/userdata/$t/2_4/$U/$D/reelia.conf
@@ -59,7 +59,7 @@ done
 cd /opt/reelia/reelia/web
 sudo -u reelia bash -c 'set -a; . /etc/reelia.env; /opt/reelia/.venv/bin/flask --app app crear-usuario TU@EMAIL --nombre "Tu nombre" --admin'
 ```
-Te pide la contraseña. Después entrás a `https://reelia.TU-DOMINIO` y creás el resto de los usuarios desde **Usuarios**.
+Te pide la contraseña. Después entrás a `https://videolabs.luciolopezfleming.com` y creás el resto de los usuarios desde **Usuarios**.
 
 ## Actualizar a una versión nueva
 ```bash
