@@ -377,7 +377,7 @@ def archivo_video(vid):
         abort(404)
     descargar = request.args.get("descargar") == "1"
     return send_file(ruta, mimetype="video/mp4", as_attachment=descargar,
-                     download_name=f"reelia-{v['id']}.mp4", conditional=True)
+                     download_name=f"videolabs-{v['id']}.mp4", conditional=True)
 
 
 @app.route("/video/<vid>/borrar", methods=["POST"])

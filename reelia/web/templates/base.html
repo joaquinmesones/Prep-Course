@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block titulo %}Reelia{% endblock %} · Reelia</title>
+  <title>{% block titulo %}VideoLabs{% endblock %} · VideoLabs</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
 </head>
 <body>
   {% if usuario %}
   <header class="barra">
-    <a class="logo" href="{{ url_for('panel') }}"><span class="punto"></span>Reelia</a>
+    <a class="logo" href="{{ url_for('panel') }}"><span class="punto"></span>VideoLabs<small class="lema">Soluciones inmobiliarias</small></a>
     <nav>
       <a href="{{ url_for('panel') }}">Mis videos</a>
       <a class="btn chico" href="{{ url_for('nuevo') }}">+ Nuevo video</a>
@@ -28,5 +28,6 @@
     {% endwith %}
     {% block contenido %}{% endblock %}
   </main>
+  <footer class="pie">VideoLabs · Soluciones inmobiliarias · Creado por Joaquín Mesones</footer>
 </body>
 </html>

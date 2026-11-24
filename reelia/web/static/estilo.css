@@ -140,3 +140,10 @@ table { width: 100%; border-collapse: collapse; }
 td { padding: 10px 6px; border-bottom: 1px solid var(--borde); vertical-align: middle; }
 .chip { display: inline-block; font-size: .75rem; font-weight: 600; padding: 2px 9px; border-radius: 999px; background: color-mix(in srgb, var(--marca) 15%, transparent); color: var(--marca-osc); margin-right: 4px; }
 .chip.gris { background: var(--borde); color: var(--suave); }
+
+/* marca VideoLabs */
+.logo .lema { font-size: .72rem; font-weight: 500; color: var(--suave); letter-spacing: 0; margin-left: 4px; padding-left: 10px; border-left: 1px solid var(--borde); }
+@media (max-width: 560px) { .logo .lema { display: none; } }
+.pie { text-align: center; color: var(--suave); font-size: .8rem; padding: 0 16px 28px; }
+.centrado + .pie { display: none; }
+.firma { margin: 18px 0 0; padding-top: 16px; border-top: 1px solid var(--borde); text-align: center; font-size: .82rem; color: var(--suave); }
