@@ -7,13 +7,18 @@
 
   <section class="tarjeta">
     <h2><span class="paso">1</span> Fotos</h2>
-    <p class="nota">Subí entre 4 y 15 fotos. Arrastralas para ordenar el recorrido: la primera es la portada. Podés escribir un texto corto para cada una (ej. "Cocina integrada").</p>
+    <p class="nota">Subí entre 4 y 15 fotos. {% if ia %}Si dejás activada la IA, ella elige la portada y el orden. Si no, arrastralas para ordenar el recorrido: la primera es la portada.{% else %}Arrastralas para ordenar el recorrido: la primera es la portada.{% endif %} Podés escribir un texto corto para cada una (ej. "Cocina integrada").</p>
     <label class="zona" id="zona">
       <input type="file" id="fotos" name="fotos" accept="image/jpeg,image/png,image/webp" multiple>
       <strong>Tocá o arrastrá las fotos acá</strong>
       <span>JPG, PNG o WEBP</span>
     </label>
     <ol class="fotos" id="lista"></ol>
+    {% if ia %}
+    <label class="check ia"><input type="checkbox" name="ia" id="ia" checked>
+      <span><strong>Que la IA ordene las fotos y escriba los textos</strong>
+      Detecta cada ambiente, descarta las repetidas o malas y arma el recorrido. Los textos que escribas vos se respetan.</span></label>
+    {% endif %}
   </section>
 
   <section class="tarjeta">

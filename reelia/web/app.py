@@ -33,6 +33,11 @@ DATOS = os.environ.get("REELIA_DATOS", os.path.join(BASE, "datos"))
 MOTOR = os.environ.get("REELIA_MOTOR",
                        os.path.join(BASE, "..", "fotos_a_video", "reelia_fotos.py"))
 EXT_FOTOS = {".jpg", ".jpeg", ".png", ".webp"}
+sys.path.insert(0, os.path.dirname(MOTOR))  # para importar el curador de fotos
+
+
+def ia_disponible():
+    return bool(os.environ.get("ANTHROPIC_API_KEY"))
 MAX_FOTOS = 15
 
 app = Flask(__name__)
@@ -279,7 +284,7 @@ def nuevo():
             marca = {k: d.get(k) for k in ("inmobiliaria", "asesor", "whatsapp", "color_marca")}
             if (marca.get("color_marca") or "").upper() == "#C8742B":  # color viejo por defecto
                 marca["color_marca"] = None
-        return render_template("nuevo.html", marca=marca)
+        return render_template("nuevo.html", marca=marca, ia=ia_disponible())
 
     f = request.form
     fotos = [x for x in request.files.getlist("fotos") if x and x.filename]
@@ -323,6 +328,7 @@ def nuevo():
         "whatsapp": f.get("whatsapp", "").strip(),
         "color_marca": f.get("color_marca", "#F40009"),
         "tomas": tomas,
+        "ia": bool(f.get("ia")) and ia_disponible(),
     }
     if logo and logo.filename:
         ext = os.path.splitext(secure_filename(logo.filename))[1].lower()
@@ -349,6 +355,10 @@ def renderizar(vid, estilo):
     c = db_suelta()
     c.execute("UPDATE videos SET estado='procesando' WHERE id=?", (vid,))
     c.commit()
+    with open(os.path.join(carpeta, "propiedad.json"), encoding="utf-8") as fh:
+        datos = json.load(fh)
+    if datos.get("ia"):
+        curar_con_ia(carpeta, datos)
     try:
         r = subprocess.run([sys.executable, MOTOR, "--fotos", os.path.join(carpeta, "fotos"),
                             "--datos", os.path.join(carpeta, "propiedad.json"),
@@ -364,10 +374,59 @@ def renderizar(vid, estilo):
     c.close()
 
 
+def curar_con_ia(carpeta, datos):
+    """Ordena las fotos y escribe los textos con IA. Si falla, sigue con el orden del usuario."""
+    try:
+        import reelia_curador
+        nombres = [t["foto"] for t in datos["tomas"]]
+        cur = reelia_curador.curar([os.path.join(carpeta, "fotos", n) for n in nombres],
+                                   datos.get("tipo"))
+        usuario = {t["foto"]: t["etiqueta"] for t in datos["tomas"] if t.get("etiqueta")}
+        datos["tomas"] = reelia_curador.aplicar_a_tomas(cur, nombres, usuario)
+        cur["archivos"] = nombres
+        with open(os.path.join(carpeta, "curacion.json"), "w", encoding="utf-8") as fh:
+            json.dump(cur, fh, ensure_ascii=False, indent=2)
+        with open(os.path.join(carpeta, "propiedad.json"), "w", encoding="utf-8") as fh:
+            json.dump(datos, fh, ensure_ascii=False, indent=2)
+    except Exception as e:  # noqa: BLE001
+        app.logger.warning("Curador IA falló: %s", e)
+        with open(os.path.join(carpeta, "aviso_ia.txt"), "w", encoding="utf-8") as fh:
+            fh.write("La IA no pudo ordenar las fotos; se usó el orden que subiste.")
+
+
+def leer_curacion(vid):
+    carpeta = carpeta_video(vid)
+    ruta = os.path.join(carpeta, "curacion.json")
+    if os.path.exists(ruta):
+        with open(ruta, encoding="utf-8") as fh:
+            cur = json.load(fh)
+        fotos = cur["fotos"]
+        orden = [dict(fotos[k - 1], archivo=cur["archivos"][k - 1]) for k in cur["orden"]]
+        descartadas = [dict(f, archivo=cur["archivos"][f["numero"] - 1])
+                       for f in fotos if f["descartar"]]
+        return {"orden": orden, "descartadas": descartadas}
+    aviso = os.path.join(carpeta, "aviso_ia.txt")
+    if os.path.exists(aviso):
+        with open(aviso, encoding="utf-8") as fh:
+            return {"aviso": fh.read()}
+    return None
+
+
+@app.route("/video/<vid>/foto/<nombre>")
+@login_requerido
+def foto_video(vid, nombre):
+    v = video_del_usuario(vid)
+    ruta = os.path.join(carpeta_video(v["id"]), "fotos", secure_filename(nombre))
+    if not os.path.exists(ruta):
+        abort(404)
+    return send_file(ruta)
+
+
 @app.route("/video/<vid>")
 @login_requerido
 def ver_video(vid):
-    return render_template("video.html", v=video_del_usuario(vid))
+    v = video_del_usuario(vid)
+    return render_template("video.html", v=v, curacion=leer_curacion(v["id"]))
 
 
 @app.route("/video/<vid>/archivo")

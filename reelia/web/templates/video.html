@@ -9,7 +9,7 @@
     {% elif v.estado == 'error' %}
       <div class="ph error">No se pudo generar el video</div>
     {% else %}
-      <div class="ph cargando"><div class="spinner"></div>Armando tu video…<small>Tarda 1 o 2 minutos</small></div>
+      <div class="ph cargando"><div class="spinner"></div>Armando tu video…<small>Tarda 1 o 2 minutos{% if v.datos and '"ia": true' in v.datos %} (la IA está ordenando las fotos){% endif %}</small></div>
     {% endif %}
   </div>
   <div class="tarjeta lateral">
@@ -28,5 +28,27 @@
     {% endif %}
   </div>
 </div>
+{% if curacion and curacion.orden %}
+<section class="tarjeta curacion">
+  <h2>Cómo ordenó la IA las fotos</h2>
+  <ol class="fotos chicas">
+    {% for f in curacion.orden %}
+    <li><img src="{{ url_for('foto_video', vid=v.id, nombre=f.archivo) }}" alt="">
+      <span class="num">{{ 'Portada' if loop.first else loop.index }}</span>
+      <small><strong>{{ f.ambiente|capitalize }}</strong>{% if not loop.first and f.etiqueta %}<br>“{{ f.etiqueta }}”{% endif %}</small></li>
+    {% endfor %}
+  </ol>
+  {% if curacion.descartadas %}
+  <h3>Descartadas</h3>
+  <ul class="descartadas">
+    {% for f in curacion.descartadas %}
+    <li><img src="{{ url_for('foto_video', vid=v.id, nombre=f.archivo) }}" alt=""><span>{{ f.motivo }}</span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{% elif curacion and curacion.aviso %}
+<div class="aviso error">{{ curacion.aviso }}</div>
+{% endif %}
 {% if v.estado in ('en_cola','procesando') %}<script>setTimeout(()=>location.reload(), 4000)</script>{% endif %}
 {% endblock %}

@@ -3,3 +3,4 @@ gunicorn>=22
 Pillow
 numpy
 scipy
+anthropic>=2.13

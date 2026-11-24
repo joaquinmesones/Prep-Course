@@ -58,9 +58,17 @@ sudo -u reelia REELIA_DATOS=/opt/reelia/datos /opt/reelia/.venv/bin/flask --app 
 ```
 Te pide la contraseña. Después entrás a `https://videolabs.luciolopezfleming.com` y creás el resto de los usuarios desde **Usuarios**.
 
+## 8. Activar la IA (ordenar fotos y escribir textos)
+1. Creá una clave en https://console.anthropic.com → **API Keys** (necesita saldo; cada video usa unos USD 0,05–0,10).
+2. En la Consola web del VPS (te pide pegar la clave; no se muestra):
+```bash
+read -s -p "Clave de Anthropic: " K && echo && sed -i '/^ANTHROPIC_API_KEY=/d' /etc/reelia.env && echo "ANTHROPIC_API_KEY=$K" >> /etc/reelia.env && unset K && systemctl restart reelia && echo "== IA ACTIVADA =="
+```
+Sin clave, la plataforma funciona igual y la opción de IA no aparece.
+
 ## Actualizar a una versión nueva
 ```bash
-cd /opt/reelia/src && sudo -u reelia git pull && systemctl restart reelia
+cd /opt/reelia/src && sudo -u reelia git pull && /opt/reelia/.venv/bin/pip install -q -r /opt/reelia/reelia/web/requirements.txt && systemctl restart reelia
 ```
 
 ## Copias de seguridad

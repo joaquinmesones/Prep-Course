@@ -12,6 +12,12 @@ Convierte las fotos de una propiedad + sus datos en un video vertical (1080x1920
 - Música original compuesta por Reelia (libre de derechos), en 3 estilos: `calido`, `moderno` y `sereno` (`reelia_musica.py`).
 - Mezcla de voz + música (la música baja sola cuando habla la voz) y el video se ajusta a la duración de la voz.
 
+## Curador de fotos con IA (`reelia_curador.py`)
+Con `ANTHROPIC_API_KEY` configurada, Claude mira las fotos, detecta cada ambiente, descarta repetidas/malas, elige la portada, ordena el recorrido y escribe un texto corto por foto:
+```bash
+python3 reelia_curador.py --fotos fotos/ --datos propiedad.json --aplicar
+```
+
 ## Uso
 ```bash
 # 1. Ver el guion de la voz en off
@@ -30,6 +36,5 @@ Requiere `ffmpeg`, `Pillow`, `numpy` y `scipy`.
 
 ## Pendiente
 - Voz en off opcional con acento argentino: conectar ElevenLabs (más adelante).
-- Curador automático: clasificar fotos por ambiente y ordenar el recorrido con IA.
 - Sumar una biblioteca de temas con licencia comercial (ej. Pixabay Music) como alternativa a la música propia.
 - Exportar también 4:5 (feed) y versiones de 15 / 30 / 60 s.
