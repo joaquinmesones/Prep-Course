@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block titulo %}Nuevo video{% endblock %}
+{% block contenido %}
+<h1>Nuevo video de propiedad</h1>
+<form method="post" enctype="multipart/form-data" id="form-nuevo">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+
+  <section class="tarjeta">
+    <h2><span class="paso">1</span> Fotos</h2>
+    <p class="nota">Subí entre 4 y 15 fotos. Arrastralas para ordenar el recorrido: la primera es la portada. Podés escribir un texto corto para cada una (ej. "Cocina integrada").</p>
+    <label class="zona" id="zona">
+      <input type="file" id="fotos" name="fotos" accept="image/jpeg,image/png,image/webp" multiple>
+      <strong>Tocá o arrastrá las fotos acá</strong>
+      <span>JPG, PNG o WEBP</span>
+    </label>
+    <ol class="fotos" id="lista"></ol>
+  </section>
+
+  <section class="tarjeta">
+    <h2><span class="paso">2</span> Datos de la propiedad</h2>
+    <div class="campos">
+      <label>Operación
+        <select name="operacion"><option>Venta</option><option>Alquiler</option><option>Alquiler temporario</option></select></label>
+      <label>Tipo<input name="tipo" placeholder="departamento, casa, PH…" required></label>
+      <label class="doble">Ubicación<input name="ubicacion" placeholder="Barrio, ciudad" required></label>
+      <label>Moneda<select name="moneda"><option>USD</option><option>ARS</option></select></label>
+      <label>Precio<input name="precio" inputmode="numeric" placeholder="Vacío = “Consultá el precio”"></label>
+      <label>Ambientes<input name="ambientes" inputmode="numeric"></label>
+      <label>Dormitorios<input name="dormitorios" inputmode="numeric"></label>
+      <label>Baños<input name="banos" inputmode="numeric"></label>
+      <label>m² totales<input name="m2" inputmode="numeric"></label>
+      <label class="check"><input type="checkbox" name="cochera"> Tiene cochera</label>
+    </div>
+  </section>
+
+  <section class="tarjeta">
+    <h2><span class="paso">3</span> Tu marca</h2>
+    <div class="campos">
+      <label>Inmobiliaria<input name="inmobiliaria" value="{{ marca.inmobiliaria or '' }}"></label>
+      <label>Asesor<input name="asesor" value="{{ marca.asesor or '' }}"></label>
+      <label>WhatsApp<input name="whatsapp" value="{{ marca.whatsapp or '' }}" placeholder="+54 9 11 …"></label>
+      <label>Color de marca<input type="color" name="color_marca" value="{{ marca.color_marca or '#C8742B' }}"></label>
+      <label class="doble">Logo (opcional, PNG con fondo transparente)<input type="file" name="logo" accept="image/png,image/jpeg,image/webp"></label>
+    </div>
+  </section>
+
+  <section class="tarjeta">
+    <h2><span class="paso">4</span> Música</h2>
+    <div class="opciones">
+      <label><input type="radio" name="musica" value="calido" checked><span><strong>Cálida</strong>Piano y ritmo suave</span></label>
+      <label><input type="radio" name="musica" value="moderno"><span><strong>Moderna</strong>Más movida, para ads</span></label>
+      <label><input type="radio" name="musica" value="sereno"><span><strong>Serena</strong>Lenta, premium</span></label>
+      <label><input type="radio" name="musica" value="ninguno"><span><strong>Sin música</strong>Video mudo</span></label>
+    </div>
+    <p class="nota">Reelia compone una pista original para cada video: libre de derechos.</p>
+  </section>
+
+  <button class="btn grande" id="enviar">Crear video</button>
+</form>
+<script src="{{ url_for('static', filename='nuevo.js') }}"></script>
+{% endblock %}

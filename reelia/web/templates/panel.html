@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block titulo %}Mis videos{% endblock %}
+{% block contenido %}
+<div class="encabezado">
+  <h1>Mis videos</h1>
+  <a class="btn" href="{{ url_for('nuevo') }}">+ Nuevo video</a>
+</div>
+{% if not videos %}
+  <div class="vacio tarjeta">
+    <h2>Todavía no hiciste ningún video</h2>
+    <p>Subí las fotos de una propiedad, completá los datos y Reelia arma el reel por vos.</p>
+    <a class="btn" href="{{ url_for('nuevo') }}">Crear mi primer video</a>
+  </div>
+{% else %}
+  <div class="grilla">
+    {% for v in videos %}
+    <a class="tarjeta video" href="{{ url_for('ver_video', vid=v.id) }}">
+      <div class="miniatura">
+        {% if v.estado == 'listo' %}
+          <video src="{{ url_for('archivo_video', vid=v.id) }}#t=1.5" muted preload="metadata"></video>
+        {% else %}<div class="ph"></div>{% endif %}
+      </div>
+      <div class="info">
+        <strong>{{ v.titulo }}</strong>
+        <span class="estado {{ v.estado }}">{{ {'en_cola':'En cola','procesando':'Procesando…','listo':'Listo','error':'Error'}[v.estado] }}</span>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+{% endif %}
+{% endblock %}

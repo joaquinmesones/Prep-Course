@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}Reelia{% endblock %} · Reelia</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+</head>
+<body>
+  {% if usuario %}
+  <header class="barra">
+    <a class="logo" href="{{ url_for('panel') }}"><span class="punto"></span>Reelia</a>
+    <nav>
+      <a href="{{ url_for('panel') }}">Mis videos</a>
+      <a class="btn chico" href="{{ url_for('nuevo') }}">+ Nuevo video</a>
+      {% if usuario.admin %}<a href="{{ url_for('usuarios') }}">Usuarios</a>{% endif %}
+      <a href="{{ url_for('cuenta') }}">Mi cuenta</a>
+      <form method="post" action="{{ url_for('salir') }}" class="enlinea">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="link">Salir</button>
+      </form>
+    </nav>
+  </header>
+  {% endif %}
+  <main class="{% block clase_main %}contenedor{% endblock %}">
+    {% with mensajes = get_flashed_messages(with_categories=true) %}
+      {% for cat, m in mensajes %}<div class="aviso {{ cat }}">{{ m }}</div>{% endfor %}
+    {% endwith %}
+    {% block contenido %}{% endblock %}
+  </main>
+</body>
+</html>

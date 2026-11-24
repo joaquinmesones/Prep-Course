@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block titulo %}Usuarios{% endblock %}
+{% block contenido %}
+<h1>Usuarios</h1>
+<div class="dos-col">
+  <div class="tarjeta">
+    <h2>Nuevo usuario</h2>
+    <form method="post">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="accion" value="crear">
+      <label>Nombre<input name="nombre"></label>
+      <label>Email<input type="email" name="email" required></label>
+      <label>Contraseña inicial<input type="text" name="clave" minlength="8" required></label>
+      <label class="check"><input type="checkbox" name="admin"> Es administrador</label>
+      <button class="btn">Crear usuario</button>
+    </form>
+  </div>
+  <div class="tarjeta">
+    <h2>Registrados</h2>
+    <table>
+      {% for u in lista %}
+      <tr>
+        <td><strong>{{ u.nombre or '—' }}</strong><br><span class="nota">{{ u.email }}</span></td>
+        <td>{% if u.admin %}<span class="chip">Admin</span>{% endif %}{% if not u.activo %}<span class="chip gris">Inactivo</span>{% endif %}</td>
+        <td>
+          {% if u.id != usuario.id %}
+          <form method="post" class="enlinea">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="hidden" name="id" value="{{ u.id }}">
+            <input type="hidden" name="accion" value="{{ 'desactivar' if u.activo else 'activar' }}">
+            <button class="link">{{ 'Desactivar' if u.activo else 'Activar' }}</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}
