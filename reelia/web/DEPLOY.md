@@ -71,7 +71,8 @@ Instala la transcripción y deja descargado el modelo (≈470 MB, una sola vez),
 ```bash
 /opt/reelia/.venv/bin/pip install -q -r /opt/reelia/reelia/web/requirements.txt
 sudo -u reelia /opt/reelia/.venv/bin/python -c "from faster_whisper import WhisperModel; WhisperModel('small', device='cpu', compute_type='int8')"
-cp /opt/reelia/reelia/web/despliegue/nginx-videolabs.conf /etc/nginx/conf.d/videolabs.conf  # (certbot: volver a correr si se pisa el bloque HTTPS)
+# subir el límite de nginx sin pisar el bloque HTTPS que agregó certbot:
+sed -i 's/client_max_body_size 200M;/client_max_body_size 1100M;\n    client_body_timeout 300s;/' /etc/nginx/conf.d/videolabs.conf && nginx -t && systemctl reload nginx
 ```
 Para otro tamaño de modelo: `REELIA_WHISPER_MODELO=base` (más rápido) o `medium` (más preciso) en `/etc/reelia.env`.
 
