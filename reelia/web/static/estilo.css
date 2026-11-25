@@ -191,3 +191,15 @@ label.check.ia strong { color: var(--texto); }
 .borrar-texto { display: block; width: 100%; border: 0; border-top: 1px solid var(--borde); background: transparent; color: var(--error); font: inherit; font-size: .78rem; padding: 6px; cursor: pointer; }
 #form-editar #zona { margin-top: 16px; padding: 20px; }
 .fotos li:first-child .acciones button[data-a=izq] { display: none; }
+
+/* formato horizontal */
+.formatos span { flex-direction: column; }
+.forma { display: block; border: 2px solid currentColor; border-radius: 4px; margin-bottom: 8px; color: var(--suave); }
+.forma.v { width: 18px; height: 32px; }
+.forma.h { width: 40px; height: 22px; margin-top: 5px; margin-bottom: 13px; }
+.opciones input:checked + span .forma { color: var(--marca); }
+.miniatura.horizontal { background: #111; aspect-ratio: 9/16; display: flex; align-items: center; }
+.miniatura.horizontal video { aspect-ratio: 16/9; height: auto; object-fit: contain; }
+.detalle.horizontal { grid-template-columns: 1fr; }
+.detalle.horizontal .reproductor video, .detalle.horizontal .reproductor .ph { aspect-ratio: 16/9; }
+@media (min-width: 761px) { .detalle.horizontal { grid-template-columns: minmax(0, 1fr) 300px; } }

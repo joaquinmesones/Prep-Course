@@ -32,7 +32,18 @@ import tempfile
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
-W, H = 1080, 1920
+W, H = 1080, 1920  # vertical por defecto; usar_formato() cambia a horizontal
+FORMATOS = {"vertical": (1080, 1920), "horizontal": (1920, 1080)}
+
+
+def usar_formato(nombre):
+    """Cambia el tamaño de salida (todas las placas y tomas leen W y H al dibujar)."""
+    global W, H
+    W, H = FORMATOS.get(nombre, FORMATOS["vertical"])
+
+
+def es_horizontal():
+    return W > H
 FPS = 30
 TRANSICION = 0.6  # segundos de fundido entre tomas
 
@@ -129,22 +140,25 @@ def placa_portada(d, marca):
     img.paste(Image.new("RGBA", (W, H), (0, 0, 0, 255)), (0, 0), grad.resize((W, H)))
     dr = ImageDraw.Draw(img)
 
+    # en vertical el bloque deja lugar al logo centrado abajo; en horizontal el logo va a la derecha
+    b = (H - 70 if es_horizontal() else H - 375) - 385  # y del chip
+    x0 = 90 if es_horizontal() else 80
     op = d.get("operacion", "Venta").upper()
     f_chip = fuente(FUENTE_BOLD, 44)
     tw = dr.textlength(op, font=f_chip)
-    x, y = 80, 1160
-    dr.rounded_rectangle((x, y, x + tw + 60, y + 84), radius=42, fill=marca + (255,))
-    dr.text((x + 30, y + 16), op, font=f_chip, fill="white")
+    dr.rounded_rectangle((x0, b, x0 + tw + 60, b + 84), radius=42, fill=marca + (255,))
+    dr.text((x0 + 30, b + 16), op, font=f_chip, fill="white")
 
     precio = formatear_precio(d)
     if precio:
-        dr.text((80, 1270), precio, font=fuente(FUENTE_BOLD, 112), fill="white")
+        dr.text((x0, b + 110), precio, font=fuente(FUENTE_BOLD, 112), fill="white")
     else:
-        dr.text((80, 1290), "Consultá el precio", font=fuente(FUENTE_BOLD, 92), fill="white")
+        dr.text((x0, b + 130), "Consultá el precio", font=fuente(FUENTE_BOLD, 92), fill="white")
     if d.get("ubicacion"):
-        dr.text((84, 1420), d["ubicacion"], font=fuente(FUENTE_SEMI, 54), fill=(235, 235, 235))
+        dr.text((x0 + 4, b + 260), d["ubicacion"], font=fuente(FUENTE_SEMI, 54), fill=(235, 235, 235))
     if d.get("tipo"):
-        dr.text((84, 1495), d["tipo"].capitalize(), font=fuente(FUENTE_REG, 46), fill=(210, 210, 210))
+        dr.text((x0 + 4, b + 335), d["tipo"].capitalize(), font=fuente(FUENTE_REG, 46),
+                fill=(210, 210, 210))
     return img
 
 
@@ -155,7 +169,7 @@ def placa_dato(texto, marca):
     f = fuente(FUENTE_BOLD, 58)
     tw = dr.textlength(texto, font=f)
     x0 = (W - tw) / 2 - 48
-    y0 = 1500
+    y0 = H - 200 if es_horizontal() else H - 420
     dr.rounded_rectangle((x0 + 6, y0 + 8, x0 + tw + 102, y0 + 128), radius=30, fill=(0, 0, 0, 90))
     dr.rounded_rectangle((x0, y0, x0 + tw + 96, y0 + 120), radius=30, fill=(255, 255, 255, 240))
     dr.rectangle((x0, y0 + 20, x0 + 10, y0 + 100), fill=marca + (255,))
@@ -175,15 +189,27 @@ def placa_cierre(d, marca, fondo):
 
     y = 560
     logo = d.get("logo")
+    horizontal = es_horizontal()
+    if horizontal:  # logo a la izquierda, textos a la derecha, todo centrado en alto
+        col = W * 0.70
+
+        def centrado(txt, y, f, color):  # noqa: F811
+            tw = dr.textlength(txt, font=f)
+            dr.text((col - tw / 2, y), txt, font=f, fill=color)
+        y = (H - 600) // 2 + 20
     if logo and os.path.exists(logo):
         lg = Image.open(logo).convert("RGBA")
-        lg.thumbnail((760, 300))
+        lg.thumbnail((560, 230) if horizontal else (760, 300))
         pad_x, pad_y = 56, 44
         cw, ch = lg.width + 2 * pad_x, lg.height + 2 * pad_y
-        x0, y0 = (W - cw) // 2, 380
+        if horizontal:
+            x0, y0 = int(W * 0.25 - cw / 2), (H - ch) // 2
+        else:
+            x0, y0 = (W - cw) // 2, 380
         dr.rounded_rectangle((x0, y0, x0 + cw, y0 + ch), radius=36, fill=(255, 255, 255, 250))
         base.alpha_composite(lg, (x0 + pad_x, y0 + pad_y))
-        y = y0 + ch + 90
+        if not horizontal:
+            y = y0 + ch + 90
     elif d.get("inmobiliaria"):
         centrado(d["inmobiliaria"], y, fuente(FUENTE_BOLD, 76), "white")
         y += 150
@@ -195,12 +221,12 @@ def placa_cierre(d, marca, fondo):
     y += 150
 
     if d.get("whatsapp"):
-        f = fuente(FUENTE_BOLD, 60)
+        f = fuente(FUENTE_BOLD, 52 if horizontal else 60)
         txt = f"WhatsApp  {d['whatsapp']}"
         tw = dr.textlength(txt, font=f)
-        x0 = (W - tw) / 2 - 50
+        x0 = (W * 0.70 if horizontal else W / 2) - tw / 2 - 50
         dr.rounded_rectangle((x0, y, x0 + tw + 100, y + 130), radius=65, fill=(37, 211, 102, 255))
-        dr.text((x0 + 50, y + 30), txt, font=f, fill="white")
+        dr.text((x0 + 50, y + (34 if horizontal else 30)), txt, font=f, fill="white")
         y += 220
     if d.get("asesor"):
         centrado(d["asesor"], y, fuente(FUENTE_SEMI, 54), "white")
@@ -215,10 +241,13 @@ def placa_pie_logo(logo):
     """Franja blanca redondeada con el logo, abajo al centro, para todas las tomas."""
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     lg = Image.open(logo).convert("RGBA")
-    lg.thumbnail((420, 92))
+    lg.thumbnail((340, 74) if es_horizontal() else (420, 92))
     pad_x, pad_y = 34, 20
     cw, ch = lg.width + 2 * pad_x, lg.height + 2 * pad_y
-    x0, y0 = (W - cw) // 2, H - ch - 64
+    if es_horizontal():
+        x0, y0 = W - cw - 56, H - ch - 48
+    else:
+        x0, y0 = (W - cw) // 2, H - ch - 64
     dr = ImageDraw.Draw(img)
     dr.rounded_rectangle((x0 + 4, y0 + 6, x0 + cw + 4, y0 + ch + 6), radius=26, fill=(0, 0, 0, 70))
     dr.rounded_rectangle((x0, y0, x0 + cw, y0 + ch), radius=26, fill=(255, 255, 255, 245))
@@ -268,6 +297,26 @@ def preparar_foto(ruta, destino):
     return im.size
 
 
+def movimiento_horizontal(ancho, alto, seg, idx, n):
+    """Salida 16:9: fotos horizontales llenan la pantalla (paneo si son panorámicas,
+    zoom suave si no); fotos verticales van centradas sobre la misma foto desenfocada."""
+    z_ini, z_fin = (1.0, 1.1) if idx % 2 == 0 else (1.1, 1.0)
+    zoom = (f"zoompan=z='{z_ini}+({z_fin}-{z_ini})*on/{n}':"
+            f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={n}:s={W}x{H}:fps={FPS}")
+    if ancho / alto >= 1.2:
+        factor = max(W / ancho, H * 1.06 / alto)
+        ew, eh = int(ancho * factor) // 2 * 2, int(alto * factor) // 2 * 2
+        if ew > W * 1.25:  # panorámica: recorrido lateral
+            direc = f"(iw-ow)*t/{seg}" if idx % 4 == 0 else f"(iw-ow)*(1-t/{seg})"
+            return f"scale={ew}:{eh},crop={W}:{H}:x='{direc}':y='(ih-oh)/2'"
+        return (f"scale={W * 2}:{H * 2}:force_original_aspect_ratio=increase,"
+                f"crop={W * 2}:{H * 2},{zoom}")
+    return (f"split=2[fondo][frente];"
+            f"[fondo]scale={W * 2}:{H * 2}:force_original_aspect_ratio=increase,"
+            f"crop={W * 2}:{H * 2},boxblur=40:2,eq=brightness=-0.08[f];"
+            f"[frente]scale=-2:{H * 2}[c];[f][c]overlay=(W-w)/2:0,{zoom}")
+
+
 def render_toma(foto, overlay_png, seg, idx, salida):
     """Una toma: foto con movimiento + overlay de texto con fundido."""
     with Image.open(foto) as im:
@@ -275,7 +324,9 @@ def render_toma(foto, overlay_png, seg, idx, salida):
     n = int(seg * FPS)
     horizontal = ancho / alto > 0.75  # casi todas las fotos de propiedades
 
-    if horizontal:
+    if es_horizontal():
+        mov = movimiento_horizontal(ancho, alto, seg, idx, n)
+    elif horizontal:
         # Fondo desenfocado + foto llenando el alto con paneo lateral (recorrido)
         # o zoom lento, alternando para dar variedad.
         escala_h = int(H * 1.08)
@@ -373,10 +424,12 @@ def main():
     ap.add_argument("--segundos-por-foto", type=float, default=3.2)
     ap.add_argument("--max-fotos", type=int, default=12)
     ap.add_argument("--guion", action="store_true", help="solo imprimir el guion de la voz")
+    ap.add_argument("--formato", choices=list(FORMATOS), default="vertical")
     a = ap.parse_args()
 
     with open(a.datos, encoding="utf-8") as f:
         d = json.load(f)
+    usar_formato(a.formato)
     if a.guion:
         print(generar_guion(d))
         return

@@ -2,7 +2,8 @@
 {% block titulo %}{{ v.titulo }}{% endblock %}
 {% block contenido %}
 <a class="volver" href="{{ url_for('panel') }}">← Mis videos</a>
-<div class="detalle">
+{% set horizontal = v.datos and '"formato": "horizontal"' in v.datos %}
+<div class="detalle {{ 'horizontal' if horizontal }}">
   <div class="reproductor">
     {% if v.estado == 'listo' %}
       <video src="{{ url_for('archivo_video', vid=v.id) }}" controls playsinline></video>
@@ -17,7 +18,7 @@
     <p class="estado {{ v.estado }}">{{ {'en_cola':'En cola','procesando':'Procesando…','listo':'Listo para publicar','error':'Error'}[v.estado] }}</p>
     {% if v.estado == 'listo' %}
       <a class="btn ancho" href="{{ url_for('archivo_video', vid=v.id, descargar=1) }}">Descargar video</a>
-      <p class="nota">Formato vertical 9:16 para Reels, Historias y TikTok.</p>
+      <p class="nota">{% if horizontal %}Formato horizontal 16:9 para YouTube, Facebook, portales y WhatsApp.{% else %}Formato vertical 9:16 para Reels, Historias y TikTok.{% endif %}</p>
     {% endif %}
     {% if v.estado == 'error' %}<details><summary>Detalle técnico</summary><pre>{{ v.error }}</pre></details>{% endif %}
     {% if v.estado in ('listo','error') %}

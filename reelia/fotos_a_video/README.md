@@ -1,5 +1,7 @@
 # VideoLabs — motores de video
 
+Ambos motores aceptan `--formato vertical` (1080x1920, default) o `--formato horizontal` (1920x1080).
+
 - **Modo 1 — Video a video** (`reelia_videos.py`): clips del celular → Reel 9:16. Detecta voz con Whisper (`reelia_transcribir.py`), corta pausas, subtítulos palabra por palabra, recorridos recortados a la duración objetivo, horizontal → vertical con fondo desenfocado, color, portada, logo, cierre y música que baja cuando alguien habla.
   ```bash
   python3 reelia_videos.py --clips a.mp4 b.mov --datos propiedad.json --salida reel.mp4 --objetivo 30

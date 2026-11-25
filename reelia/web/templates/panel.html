@@ -15,7 +15,7 @@
   <div class="grilla">
     {% for v in videos %}
     <a class="tarjeta video" href="{{ url_for('ver_video', vid=v.id) }}">
-      <div class="miniatura">
+      <div class="miniatura {{ 'horizontal' if v.datos and '"formato": "horizontal"' in v.datos }}">
         {% if v.estado == 'listo' %}
           <video src="{{ url_for('archivo_video', vid=v.id) }}#t=1.5" muted preload="metadata"></video>
         {% else %}<div class="ph"></div>{% endif %}

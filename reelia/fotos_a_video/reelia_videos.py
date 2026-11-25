@@ -2,14 +2,15 @@
 """
 VideoLabs — Modo 1: Video a video.
 
-Toma uno o varios clips filmados con el celular y arma un Reel vertical 1080x1920:
+Toma uno o varios clips filmados con el celular y arma un video vertical 1080x1920
+(Reels/Historias) u horizontal 1920x1080 (YouTube, Facebook, portales) con --formato:
 
   - Detecta si en cada clip alguien habla (Whisper):
       * con voz  -> corta silencios y pausas (cortes tipo "jump cut") y pone subtítulos
                     animados palabra por palabra;
       * sin voz  -> lo trata como recorrido: recorta inicio/fin movidos y, si el total
                     se pasa de la duración objetivo, se queda con la parte central de cada clip.
-  - Adapta videos horizontales a vertical con fondo desenfocado.
+  - Adapta cada clip al formato elegido (los que no coinciden van sobre fondo desenfocado).
   - Corrige color (contraste, saturación, nitidez) y une los clips de recorrido con fundidos.
   - Portada con operación/precio/ubicación, logo al pie y cierre con WhatsApp
     (mismo diseño que el Modo 2).
@@ -87,7 +88,16 @@ def hay_voz(palabras, dur):
 
 # ------------------------------------------------------------------- render
 def filtro_vertical(ancho, alto):
-    """Cadena de video que lleva cualquier clip a 1080x1920 vertical."""
+    """Cadena de video que lleva cualquier clip al formato de salida (vertical u horizontal)."""
+    if W > H:  # salida horizontal 16:9
+        if ancho / alto >= 1.2:  # clip horizontal: llenar y recortar
+            return (f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
+                    f"setsar=1,fps={FPS},{COLOR},format=yuv420p")
+        return (f"split=2[fondo][frente];"
+                f"[fondo]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
+                f"boxblur=40:2,eq=brightness=-0.08[f];"
+                f"[frente]scale=-2:{H}[c];[f][c]overlay=(W-w)/2:0,"
+                f"setsar=1,fps={FPS},{COLOR},format=yuv420p")
     if ancho / alto <= 0.8:  # ya es vertical (o casi): llenar y recortar
         return (f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
                 f"setsar=1,fps={FPS},{COLOR},format=yuv420p")
@@ -181,7 +191,9 @@ def ass_tiempo(s):
     return f"{int(h)}:{int(m):02d}:{sec:05.2f}"
 
 
-def frases(palabras, max_palabras=4, max_chars=24, pausa=0.35):
+def frases(palabras, max_palabras=None, max_chars=None, pausa=0.35):
+    max_palabras = max_palabras or (6 if W > H else 4)
+    max_chars = max_chars or (38 if W > H else 24)
     grupos, actual = [], []
     for w in palabras:
         texto = " ".join(x["texto"] for x in actual + [w])
@@ -209,8 +221,10 @@ def escribir_ass(palabras, marca, ruta):
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, "
         "BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, "
         "BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-        "Style: Sub,Inter,82,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,"
-        "0,0,1,7,3,2,70,70,800,1",
+        ("Style: Sub,Inter,66,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,"
+         "0,0,1,6,3,2,200,200,190,1") if W > H else
+        ("Style: Sub,Inter,82,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,"
+         "0,0,1,7,3,2,70,70,800,1"),
         "", "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
@@ -224,7 +238,9 @@ def escribir_ass(palabras, marca, ruta):
                 t = x["texto"].replace("{", "(").replace("}", ")")
                 partes.append(f"{{\\c{resaltado}\\fscx112\\fscy112}}{t}{{\\r}}" if k == j else t)
             pop = "{\\fad(60,0)}" if j == 0 else ""
-            lineas.append(f"Dialogue: 0,{ass_tiempo(ini)},{ass_tiempo(fin)},Sub,,0,0,0,,"
+            # en horizontal, mientras se ve la portada (abajo a la izquierda) van a la derecha
+            margenes = "820,60,0" if W > H and grupo[0]["inicio"] < 3.9 else "0,0,0"
+            lineas.append(f"Dialogue: 0,{ass_tiempo(ini)},{ass_tiempo(fin)},Sub,,{margenes},,"
                           f"{pop}{' '.join(partes)}")
     with open(ruta, "w", encoding="utf-8") as fh:
         fh.write("\n".join(lineas) + "\n")
@@ -290,7 +306,10 @@ def mezclar(video, musica, con_voz, salida):
 
 # ---------------------------------------------------------------------- main
 def armar(clips, d, salida, objetivo=30.0, subtitulos=True, estilo_musica="calido",
-          ambiente=False, transcriptor=None, informe=None):
+          ambiente=False, transcriptor=None, informe=None, formato="vertical"):
+    global W, H
+    rf.usar_formato(formato)
+    W, H = rf.W, rf.H
     marca = rf.hex_a_rgb(d.get("color_marca", "#F40009"))
     tmp = tempfile.mkdtemp(prefix="videolabs_")
     try:
@@ -418,11 +437,12 @@ def main():
     ap.add_argument("--estilo-musica", default="calido",
                     choices=["calido", "moderno", "sereno", "ninguno"])
     ap.add_argument("--informe", help="guardar un resumen .json de la edición")
+    ap.add_argument("--formato", choices=list(rf.FORMATOS), default="vertical")
     a = ap.parse_args()
     with open(a.datos, encoding="utf-8") as fh:
         d = json.load(fh)
     armar(a.clips, d, a.salida, a.objetivo, not a.sin_subtitulos, a.estilo_musica,
-          a.con_ambiente, informe=a.informe)
+          a.con_ambiente, informe=a.informe, formato=a.formato)
 
 
 if __name__ == "__main__":
