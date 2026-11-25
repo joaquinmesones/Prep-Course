@@ -2,10 +2,26 @@
 {% block titulo %}Mis videos{% endblock %}
 {% block contenido %}
 <div class="encabezado">
-  <h1>Mis videos</h1>
+  <h1>{{ 'Mis videos' if vista == 'mios' or not usuario.admin else 'Videos' }}</h1>
   <a class="btn" href="{{ url_for('nuevo') }}">+ Nuevo video</a>
 </div>
-{% if not videos %}
+{% if usuario.admin %}
+<form class="filtro" method="get">
+  <label>Ver
+    <select name="ver" onchange="this.form.submit()">
+      <option value="todos" {{ 'selected' if vista == 'todos' }}>Todos los usuarios</option>
+      <option value="mios" {{ 'selected' if vista == 'mios' }}>Solo los míos</option>
+      {% for a in autores if a.id != usuario.id %}
+      <option value="{{ a.id }}" {{ 'selected' if vista == a.id|string }}>{{ a.nombre or a.email }} ({{ a.cantidad }})</option>
+      {% endfor %}
+    </select></label>
+  <noscript><button class="btn chico">Filtrar</button></noscript>
+  <span class="nota">{{ videos|length }} video{{ 's' if videos|length != 1 }}</span>
+</form>
+{% endif %}
+{% if not videos and usuario.admin and vista != 'mios' %}
+  <div class="vacio tarjeta"><h2>No hay videos para mostrar</h2></div>
+{% elif not videos %}
   <div class="vacio tarjeta">
     <h2>Todavía no hiciste ningún video</h2>
     <p>Subí las fotos de una propiedad, completá los datos y VideoLabs arma el reel por vos.</p>
@@ -22,6 +38,8 @@
       </div>
       <div class="info">
         <strong>{{ v.titulo }}</strong>
+        {% if usuario.admin and v.usuario_id != usuario.id %}<span class="autor">Por {{ v.autor_nombre or v.autor_email }}</span>{% endif %}
+        <span class="fecha">{{ v.creado|fecha }}</span>
         <span class="estado {{ v.estado }}">{{ {'en_cola':'En cola','procesando':'Procesando…','listo':'Listo','error':'Error'}[v.estado] }}</span>
       </div>
     </a>

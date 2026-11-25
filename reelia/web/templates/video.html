@@ -15,6 +15,7 @@
   </div>
   <div class="tarjeta lateral">
     <h1>{{ v.titulo }}</h1>
+    {% if autor and autor.id != usuario.id %}<p class="nota autor-video">Creado por <strong>{{ autor.nombre or autor.email }}</strong> · {{ v.creado|fecha }}</p>{% endif %}
     <p class="estado {{ v.estado }}">{{ {'en_cola':'En cola','procesando':'Procesando…','listo':'Listo para publicar','error':'Error'}[v.estado] }}</p>
     {% if v.estado == 'listo' %}
       <a class="btn ancho" href="{{ url_for('archivo_video', vid=v.id, descargar=1) }}">Descargar video</a>

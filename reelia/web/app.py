@@ -114,6 +114,16 @@ def csrf():
             abort(400)
 
 
+@app.template_filter("fecha")
+def filtro_fecha(ts):
+    if not ts:
+        return ""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    zona = ZoneInfo(os.environ.get("REELIA_ZONA", "America/Argentina/Buenos_Aires"))
+    return datetime.fromtimestamp(ts, zona).strftime("%d/%m/%Y %H:%M")
+
+
 @app.context_processor
 def contexto():
     return {"csrf": session.get("csrf", ""), "usuario": usuario_actual()}
@@ -272,9 +282,27 @@ def video_del_usuario(vid):
 @login_requerido
 def panel():
     u = usuario_actual()
-    vids = db().execute("SELECT * FROM videos WHERE usuario_id=? ORDER BY creado DESC",
-                        (u["id"],)).fetchall()
-    return render_template("panel.html", videos=vids)
+    consulta = ("SELECT v.*, u.nombre AS autor_nombre, u.email AS autor_email "
+                "FROM videos v JOIN usuarios u ON u.id = v.usuario_id ")
+    if not u["admin"]:
+        vids = db().execute(consulta + "WHERE v.usuario_id=? ORDER BY v.creado DESC",
+                            (u["id"],)).fetchall()
+        return render_template("panel.html", videos=vids, vista="mios")
+    # el administrador ve los videos de todos (o filtra por usuario)
+    vista = request.args.get("ver", "todos")
+    autores = db().execute("SELECT u.id, u.nombre, u.email, COUNT(v.id) AS cantidad "
+                           "FROM usuarios u JOIN videos v ON v.usuario_id = u.id "
+                           "GROUP BY u.id ORDER BY cantidad DESC").fetchall()
+    if vista == "mios":
+        vids = db().execute(consulta + "WHERE v.usuario_id=? ORDER BY v.creado DESC",
+                            (u["id"],)).fetchall()
+    elif vista.isdigit():
+        vids = db().execute(consulta + "WHERE v.usuario_id=? ORDER BY v.creado DESC",
+                            (int(vista),)).fetchall()
+    else:
+        vista = "todos"
+        vids = db().execute(consulta + "ORDER BY v.creado DESC").fetchall()
+    return render_template("panel.html", videos=vids, vista=vista, autores=autores)
 
 
 def numero(valor):
@@ -514,7 +542,10 @@ def ver_video(vid):
     if os.path.exists(ruta):
         with open(ruta, encoding="utf-8") as fh:
             informe = json.load(fh)
-    return render_template("video.html", v=v, curacion=leer_curacion(v["id"]), informe=informe)
+    autor = db().execute("SELECT id, nombre, email FROM usuarios WHERE id=?",
+                         (v["usuario_id"],)).fetchone()
+    return render_template("video.html", v=v, curacion=leer_curacion(v["id"]), informe=informe,
+                           autor=autor)
 
 
 @app.route("/video/<vid>/archivo")

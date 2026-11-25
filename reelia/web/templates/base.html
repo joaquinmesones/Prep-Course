@@ -16,7 +16,7 @@
   <header class="barra">
     <a class="logo" href="{{ url_for('panel') }}"><span class="punto"></span>VideoLabs<small class="lema"><span>Soluciones inmobiliarias</span><span class="autor">Desarrollado por Joaquín Mesones</span></small></a>
     <nav>
-      <a href="{{ url_for('panel') }}">Mis videos</a>
+      <a href="{{ url_for('panel') }}">{{ 'Videos' if usuario.admin else 'Mis videos' }}</a>
       <a class="btn chico" href="{{ url_for('nuevo') }}">+ Nuevo video</a>
       {% if usuario.admin %}<a href="{{ url_for('usuarios') }}">Usuarios</a>{% endif %}
       <a href="{{ url_for('cuenta') }}">Mi cuenta</a>

@@ -203,3 +203,10 @@ label.check.ia strong { color: var(--texto); }
 .detalle.horizontal { grid-template-columns: 1fr; }
 .detalle.horizontal .reproductor video, .detalle.horizontal .reproductor .ph { aspect-ratio: 16/9; }
 @media (min-width: 761px) { .detalle.horizontal { grid-template-columns: minmax(0, 1fr) 300px; } }
+
+/* panel del administrador */
+.filtro { display: flex; align-items: end; gap: 14px; flex-wrap: wrap; margin: 6px 0 18px; }
+.filtro label { margin: 0; min-width: 240px; }
+.info .autor { font-size: .82rem; color: var(--texto); }
+.info .fecha { font-size: .76rem; color: var(--suave); }
+.autor-video { margin: 0 0 8px; }
