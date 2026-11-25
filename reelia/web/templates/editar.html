@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block titulo %}Editar video{% endblock %}
+{% block contenido %}
+<a class="volver" href="{{ url_for('ver_video', vid=v.id) }}">← Volver al video</a>
+<h1>Editar video</h1>
+<p class="nota">Cambiá lo que quieras y tocá <strong>Guardar y volver a armar</strong>. El video actual se reemplaza cuando el nuevo esté listo.</p>
+<form method="post" enctype="multipart/form-data" id="form-editar">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+
+  {% if modo == 'videos' %}
+  <section class="tarjeta">
+    <h2><span class="paso">1</span> Videos</h2>
+    <p class="nota">Reordená o quitá videos.</p>
+    <ol class="clips" id="lista">
+      {% for n in d.clips %}
+      <li data-nombre="{{ n }}"><video muted preload="metadata" playsinline src="{{ url_for('clip_video', vid=v.id, nombre=n) }}#t=0.5"></video>
+        <div class="datos"><strong class="titulo-item">Video {{ loop.index }}</strong><span>{{ n }}</span></div>
+        <div class="acciones"><button type="button" data-a="arriba" aria-label="Subir">↑</button><button type="button" data-a="abajo" aria-label="Bajar">↓</button><button type="button" data-a="x" aria-label="Quitar">✕</button></div></li>
+      {% endfor %}
+    </ol>
+    <div class="campos opciones-video">
+      <label>Duración aproximada
+        <select name="objetivo">{% for o in [15, 30, 45, 60] %}<option value="{{ o }}" {{ 'selected' if d.objetivo == o }}>{{ o }} segundos</option>{% endfor %}</select></label>
+      <label class="check"><input type="checkbox" name="subtitulos" {{ 'checked' if d.subtitulos }}> Subtítulos automáticos cuando alguien habla</label>
+      <label class="check"><input type="checkbox" name="ambiente" {{ 'checked' if d.ambiente }}> Mantener el sonido original en los recorridos</label>
+    </div>
+  </section>
+  {% else %}
+  <section class="tarjeta">
+    <h2><span class="paso">1</span> Fotos y textos</h2>
+    <p class="nota">Arrastrá para cambiar el orden (la primera es la portada), editá o borrá los textos, quitá fotos o agregá nuevas.</p>
+    <ol class="fotos" id="lista">
+      {% for t in d.tomas %}
+      <li draggable="true" data-nombre="{{ t.foto }}" data-url="{{ url_for('foto_video', vid=v.id, nombre=t.foto) }}" data-etiqueta="{{ t.etiqueta or '' }}"></li>
+      {% endfor %}
+    </ol>
+    <h3 class="sub-seccion">Fotos que no se usan</h3>
+    <ol class="fotos chicas" id="sin-usar">
+      {% for n in sin_usar %}
+      <li data-nombre="{{ n }}" data-url="{{ url_for('foto_video', vid=v.id, nombre=n) }}"></li>
+      {% endfor %}
+    </ol>
+    <label class="zona" id="zona">
+      <input type="file" id="fotos-nuevas" name="fotos_nuevas" accept="image/jpeg,image/png,image/webp" multiple>
+      <strong>+ Agregar fotos nuevas</strong>
+      <span>JPG, PNG o WEBP</span>
+    </label>
+    {% if ia %}
+    <label class="check ia"><input type="checkbox" name="ia">
+      <span><strong>Volver a ordenar con IA</strong>
+      Si lo marcás, la IA decide de nuevo el orden y puede descartar fotos. Tus textos se mantienen.</span></label>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% include "_campos.html" %}
+
+  <button class="btn grande" id="enviar">Guardar y volver a armar</button>
+</form>
+<script src="{{ url_for('static', filename='editar.js') }}"></script>
+{% endblock %}

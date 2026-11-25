@@ -332,7 +332,7 @@ def nuevo():
     return encolar(vid, carpeta, datos, f)
 
 
-def datos_del_formulario(f, carpeta):
+def datos_del_formulario(f, carpeta, logo_actual=None):
     """Datos de la propiedad y de la marca, comunes a los dos modos."""
     datos = {
         "operacion": f.get("operacion", "Venta"),
@@ -356,6 +356,8 @@ def datos_del_formulario(f, carpeta):
         if ext in {".png", ".jpg", ".jpeg", ".webp"}:
             logo.save(os.path.join(carpeta, "logo" + ext))
             datos["logo"] = os.path.join(carpeta, "logo" + ext)
+    if "logo" not in datos and logo_actual and os.path.exists(logo_actual):
+        datos["logo"] = logo_actual
     if "logo" not in datos and os.path.exists(LOGO_DEFECTO):
         datos["logo"] = LOGO_DEFECTO  # logo de la inmobiliaria por defecto
     return datos
@@ -365,15 +367,21 @@ def encolar(vid, carpeta, datos, f):
     with open(os.path.join(carpeta, "propiedad.json"), "w", encoding="utf-8") as fh:
         json.dump(datos, fh, ensure_ascii=False, indent=2)
     titulo = " · ".join(x for x in (datos["tipo"].capitalize(), datos["ubicacion"]) if x)
-    estilo = f.get("musica", "calido")
-    if estilo not in ("calido", "moderno", "sereno", "ninguno"):
-        estilo = "calido"
+    estilo = estilo_musica(f)
+    datos["musica"] = estilo
+    with open(os.path.join(carpeta, "propiedad.json"), "w", encoding="utf-8") as fh:
+        json.dump(datos, fh, ensure_ascii=False, indent=2)
     db().execute("INSERT INTO videos VALUES (?,?,?,?,?,?,?,?)",
                  (vid, usuario_actual()["id"], titulo or "Propiedad", "en_cola", None,
                   json.dumps(datos, ensure_ascii=False), time.time(), None))
     db().commit()
     trabajos.submit(renderizar, vid, estilo)
     return redirect(url_for("ver_video", vid=vid))
+
+
+def estilo_musica(f):
+    estilo = f.get("musica", "calido")
+    return estilo if estilo in ("calido", "moderno", "sereno", "ninguno") else "calido"
 
 
 def nuevo_desde_videos(f):
@@ -432,12 +440,14 @@ def renderizar(vid, estilo):
         cmd = [sys.executable, MOTOR, "--fotos", os.path.join(carpeta, "fotos"),
                "--segundos-por-foto", "3.4"]
         limite = 900
+    nuevo = os.path.join(carpeta, "video_nuevo.mp4")
     cmd += ["--datos", os.path.join(carpeta, "propiedad.json"),
-            "--salida", os.path.join(carpeta, "video.mp4"), "--estilo-musica", estilo]
+            "--salida", nuevo, "--estilo-musica", estilo]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=limite)
         if r.returncode != 0:
             raise RuntimeError(r.stderr[-1500:] or r.stdout[-1500:])
+        os.replace(nuevo, os.path.join(carpeta, "video.mp4"))  # el anterior queda hasta acá
         c.execute("UPDATE videos SET estado='listo', terminado=? WHERE id=?", (time.time(), vid))
     except Exception as e:  # noqa: BLE001 — guardamos el error para mostrarlo
         c.execute("UPDATE videos SET estado='error', error=? WHERE id=?", (str(e)[-1500:], vid))
@@ -515,6 +525,101 @@ def archivo_video(vid):
     descargar = request.args.get("descargar") == "1"
     return send_file(ruta, mimetype="video/mp4", as_attachment=descargar,
                      download_name=f"videolabs-{v['id']}.mp4", conditional=True)
+
+
+@app.route("/video/<vid>/clip/<nombre>")
+@login_requerido
+def clip_video(vid, nombre):
+    v = video_del_usuario(vid)
+    ruta = os.path.join(carpeta_video(v["id"]), "clips", secure_filename(nombre))
+    if not os.path.exists(ruta):
+        abort(404)
+    return send_file(ruta, conditional=True)
+
+
+@app.route("/video/<vid>/editar", methods=["GET", "POST"])
+@login_requerido
+def editar_video(vid):
+    v = video_del_usuario(vid)
+    if v["estado"] in ("en_cola", "procesando"):
+        flash("Esperá a que termine de procesarse para editarlo.", "error")
+        return redirect(url_for("ver_video", vid=vid))
+    carpeta = carpeta_video(v["id"])
+    with open(os.path.join(carpeta, "propiedad.json"), encoding="utf-8") as fh:
+        anterior = json.load(fh)
+    modo = anterior.get("modo", "fotos")
+
+    if request.method == "GET":
+        sin_usar = []
+        if modo != "videos":
+            usadas = {t["foto"] for t in anterior.get("tomas", [])}
+            sin_usar = sorted(n for n in os.listdir(os.path.join(carpeta, "fotos"))
+                              if n not in usadas and os.path.splitext(n)[1].lower() in EXT_FOTOS)
+        return render_template("editar.html", v=v, d=anterior, modo=modo, ia=ia_disponible(),
+                               sin_usar=sin_usar, logo_defecto=os.path.exists(LOGO_DEFECTO),
+                               logo_propio=anterior.get("logo") not in (None, LOGO_DEFECTO))
+
+    f = request.form
+    datos = datos_del_formulario(f, carpeta, logo_actual=anterior.get("logo"))
+    if modo == "videos":
+        existentes = set(anterior.get("clips", []))
+        orden = [n for n in f.getlist("orden") if n in existentes]
+        if not orden:
+            flash("Dejá al menos un video.", "error")
+            return redirect(url_for("editar_video", vid=vid))
+        objetivo = f.get("objetivo", "30")
+        datos.update({"modo": "videos", "clips": orden,
+                      "objetivo": int(objetivo) if objetivo in ("15", "30", "45", "60") else 30,
+                      "subtitulos": bool(f.get("subtitulos")), "ambiente": bool(f.get("ambiente"))})
+    else:
+        existentes = {t["foto"] for t in anterior.get("tomas", [])}
+        existentes |= set(os.listdir(os.path.join(carpeta, "fotos")))
+        nuevas = [x for x in request.files.getlist("fotos_nuevas") if x and x.filename]
+        nombres_nuevos = []
+        base_n = len(os.listdir(os.path.join(carpeta, "fotos")))
+        for k, foto in enumerate(nuevas):
+            ext = os.path.splitext(secure_filename(foto.filename))[1].lower()
+            if ext not in EXT_FOTOS:
+                flash("Formato no permitido. Usá JPG, PNG o WEBP.", "error")
+                return redirect(url_for("editar_video", vid=vid))
+            nombre = f"{base_n + k:02d}{ext}"
+            foto.save(os.path.join(carpeta, "fotos", nombre))
+            nombres_nuevos.append(nombre)
+        tomas = []
+        for item, etiqueta in zip(f.getlist("orden"), f.getlist("etiqueta")):
+            if item.startswith("nueva:"):
+                k = int(item.split(":", 1)[1]) if item.split(":", 1)[1].isdigit() else -1
+                nombre = nombres_nuevos[k] if 0 <= k < len(nombres_nuevos) else None
+            else:
+                nombre = item if item in existentes else None
+            if nombre:
+                tomas.append({"foto": nombre,
+                              "etiqueta": None if not tomas else (etiqueta.strip()[:40] or None)})
+        if not tomas:
+            flash("Dejá al menos una foto.", "error")
+            return redirect(url_for("editar_video", vid=vid))
+        if len(tomas) > MAX_FOTOS:
+            flash(f"Máximo {MAX_FOTOS} fotos por video.", "error")
+            return redirect(url_for("editar_video", vid=vid))
+        datos["tomas"] = tomas
+        datos["ia"] = bool(f.get("ia")) and ia_disponible()
+    estilo = estilo_musica(f)
+    datos["musica"] = estilo
+    # lo que mostraba la IA o el informe anterior ya no corresponde
+    for viejo in ("curacion.json", "aviso_ia.txt"):
+        ruta = os.path.join(carpeta, viejo)
+        if os.path.exists(ruta) and not datos.get("ia"):
+            os.remove(ruta)
+    with open(os.path.join(carpeta, "propiedad.json"), "w", encoding="utf-8") as fh:
+        json.dump(datos, fh, ensure_ascii=False, indent=2)
+    titulo = " · ".join(x for x in (datos["tipo"].capitalize(), datos["ubicacion"]) if x)
+    db().execute("UPDATE videos SET titulo=?, estado='en_cola', error=NULL, datos=?, "
+                 "terminado=NULL WHERE id=?",
+                 (titulo or "Propiedad", json.dumps(datos, ensure_ascii=False), v["id"]))
+    db().commit()
+    trabajos.submit(renderizar, v["id"], estilo)
+    flash("Cambios guardados. Estamos volviendo a armar el video.", "ok")
+    return redirect(url_for("ver_video", vid=vid))
 
 
 @app.route("/video/<vid>/borrar", methods=["POST"])

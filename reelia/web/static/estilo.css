@@ -181,3 +181,13 @@ label.check.ia strong { color: var(--texto); }
 .informe { list-style: none; padding: 0; margin: 0 0 8px; display: grid; gap: 10px; }
 .informe li { padding: 10px 0; border-bottom: 1px solid var(--borde); }
 .informe .nota { margin: 6px 0 0; font-style: italic; }
+
+/* edición */
+.btn.secundario-neutro { background: transparent; color: var(--texto); border: 1px solid var(--borde); margin-top: 10px; }
+.btn.secundario-neutro:hover { border-color: var(--marca); color: var(--marca); background: transparent; }
+.sub-seccion { font-size: .95rem; margin: 20px 0 8px; }
+.fotos.chicas li { position: relative; }
+.fotos .agregar { position: absolute; left: 6px; right: 6px; bottom: 6px; padding: 5px 8px; font-size: .8rem; }
+.borrar-texto { display: block; width: 100%; border: 0; border-top: 1px solid var(--borde); background: transparent; color: var(--error); font: inherit; font-size: .78rem; padding: 6px; cursor: pointer; }
+#form-editar #zona { margin-top: 16px; padding: 20px; }
+.fotos li:first-child .acciones button[data-a=izq] { display: none; }

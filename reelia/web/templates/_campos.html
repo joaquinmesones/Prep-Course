@@ -1,0 +1,41 @@
+{# Secciones 2-4 compartidas entre "Nuevo video" y "Editar video". Usa el dict d. #}
+  <section class="tarjeta">
+    <h2><span class="paso">2</span> Datos de la propiedad</h2>
+    <div class="campos">
+      <label>Operación
+        <select name="operacion">{% for o in ['Venta', 'Alquiler', 'Alquiler temporario'] %}<option {{ 'selected' if d.operacion == o }}>{{ o }}</option>{% endfor %}</select></label>
+      <label>Tipo<input name="tipo" placeholder="departamento, casa, PH…" value="{{ d.tipo or '' }}" required></label>
+      <label class="doble">Ubicación<input name="ubicacion" placeholder="Barrio, ciudad" value="{{ d.ubicacion or '' }}" required></label>
+      <label>Moneda<select name="moneda">{% for m in ['USD', 'ARS'] %}<option {{ 'selected' if d.moneda == m }}>{{ m }}</option>{% endfor %}</select></label>
+      <label>Precio<input name="precio" inputmode="numeric" placeholder="Vacío = “Consultá el precio”" value="{{ d.precio if d.precio is not none else '' }}"></label>
+      <label>Ambientes<input name="ambientes" inputmode="numeric" value="{{ d.ambientes or '' }}"></label>
+      <label>Dormitorios<input name="dormitorios" inputmode="numeric" value="{{ d.dormitorios or '' }}"></label>
+      <label>Baños<input name="banos" inputmode="numeric" value="{{ d.banos or '' }}"></label>
+      <label>m² totales<input name="m2" inputmode="numeric" value="{{ d.m2_totales or '' }}"></label>
+      <label class="check"><input type="checkbox" name="cochera" {{ 'checked' if d.cochera }}> Tiene cochera</label>
+    </div>
+  </section>
+
+  <section class="tarjeta">
+    <h2><span class="paso">3</span> Tu marca</h2>
+    <div class="campos">
+      <label>Inmobiliaria<input name="inmobiliaria" value="{{ d.inmobiliaria or '' }}"></label>
+      <label>Asesor<input name="asesor" value="{{ d.asesor or '' }}"></label>
+      <label>WhatsApp<input name="whatsapp" value="{{ d.whatsapp or '' }}" placeholder="+54 9 11 …"></label>
+      <label>Color de marca<input type="color" name="color_marca" value="{{ d.color_marca or '#F40009' }}"></label>
+      <label class="doble">{% if logo_propio %}Logo — este video usa un logo propio. Subí otro para cambiarlo{% elif logo_defecto %}Logo — ya se usa este por defecto. Subí otro solo si querés cambiarlo para este video{% else %}Logo (opcional, PNG con fondo transparente){% endif %}
+        {% if logo_defecto and not logo_propio %}<img class="logo-defecto" src="{{ url_for('static', filename='marca/logo_defecto.png') }}" alt="Logo por defecto">{% endif %}
+        <input type="file" name="logo" accept="image/png,image/jpeg,image/webp"></label>
+    </div>
+  </section>
+
+  <section class="tarjeta">
+    <h2><span class="paso">4</span> Música</h2>
+    <div class="opciones">
+      {% set musica = d.musica or 'calido' %}
+      {% for valor, nombre, desc in [('calido', 'Cálida', 'Piano y ritmo suave'), ('moderno', 'Moderna', 'Más movida, para ads'), ('sereno', 'Serena', 'Lenta, premium'), ('ninguno', 'Sin música', 'Video mudo')] %}
+      <label><input type="radio" name="musica" value="{{ valor }}" {{ 'checked' if musica == valor }}><span><strong>{{ nombre }}</strong>{{ desc }}</span></label>
+      {% endfor %}
+    </div>
+    <p class="nota">VideoLabs compone una pista original para cada video: libre de derechos.</p>
+  </section>

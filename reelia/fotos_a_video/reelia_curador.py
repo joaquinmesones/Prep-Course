@@ -6,7 +6,7 @@ Mira las fotos de una propiedad y decide:
   - qué ambiente muestra cada una (living, cocina, dormitorio, baño...),
   - cuáles descartar (repetidas, oscuras, movidas, sin valor),
   - el orden del recorrido (portada → ambientes sociales → cocina → dormitorios → baños → exterior),
-  - un texto corto para mostrar en pantalla en cada foto.
+  (los textos en pantalla los escribe el usuario: la IA no los inventa).
 
 Necesita la variable de entorno ANTHROPIC_API_KEY.
 
@@ -39,12 +39,11 @@ ESQUEMA = {
                 "properties": {
                     "numero": {"type": "integer"},
                     "ambiente": {"type": "string"},
-                    "etiqueta": {"type": "string"},
                     "calidad": {"type": "integer"},
                     "descartar": {"type": "boolean"},
                     "motivo": {"type": "string"},
                 },
-                "required": ["numero", "ambiente", "etiqueta", "calidad", "descartar", "motivo"],
+                "required": ["numero", "ambiente", "calidad", "descartar", "motivo"],
                 "additionalProperties": False,
             },
         },
@@ -60,10 +59,6 @@ vertical tipo Reel que recorre la propiedad. Recibís las fotos numeradas.
 Para cada foto indicá:
 - ambiente: qué muestra (fachada, living, comedor, living comedor, cocina, dormitorio, \
 baño, balcón, terraza, patio, jardín, pileta, cochera, amenities, vista, otro).
-- etiqueta: texto corto para mostrar en pantalla, en español rioplatense, de 2 a 4 palabras, \
-que destaque algo visible y atractivo (ej. "Cocina integrada", "Living muy luminoso", \
-"Dormitorio con placard", "Balcón con vista"). No inventes nada que no se vea en la foto. \
-Sin emojis ni signos de exclamación.
 - calidad: de 1 (inutilizable) a 5 (excelente), según luz, nitidez, encuadre y lo atractiva que es.
 - descartar: true si es casi igual a otra foto mejor (mismo ambiente y mismo ángulo), \
 si está muy oscura, movida o no aporta nada. Si dos fotos muestran el mismo ambiente desde \
@@ -125,7 +120,6 @@ def validar(cur, n):
     por_numero = {}
     for f in cur.get("fotos", []):
         if isinstance(f.get("numero"), int) and 1 <= f["numero"] <= n:
-            f["etiqueta"] = " ".join(str(f.get("etiqueta", "")).split())[:32]
             por_numero[f["numero"]] = f
     orden = []
     for x in cur.get("orden", []):
@@ -137,7 +131,7 @@ def validar(cur, n):
                        key=lambda k: -por_numero.get(k, {}).get("calidad", 0))
         orden += resto[:min(MIN_FOTOS, n) - len(orden)]
     for k in range(1, n + 1):
-        por_numero.setdefault(k, {"numero": k, "ambiente": "otro", "etiqueta": "",
+        por_numero.setdefault(k, {"numero": k, "ambiente": "otro",
                                   "calidad": 3, "descartar": k not in orden, "motivo": ""})
         por_numero[k]["descartar"] = k not in orden
     return {"fotos": [por_numero[k] for k in range(1, n + 1)], "orden": orden}
@@ -145,12 +139,12 @@ def validar(cur, n):
 
 def aplicar_a_tomas(cur, nombres, etiquetas_usuario=None):
     """Convierte la curación en la lista "tomas" del motor de video.
-    Los textos que escribió el usuario tienen prioridad sobre los de la IA."""
+    La IA solo decide el orden; los textos son únicamente los que escribió el usuario."""
     etiquetas_usuario = etiquetas_usuario or {}
     tomas = []
     for pos, k in enumerate(cur["orden"]):
         nombre = nombres[k - 1]
-        texto = etiquetas_usuario.get(nombre) or cur["fotos"][k - 1].get("etiqueta") or None
+        texto = etiquetas_usuario.get(nombre) or None
         tomas.append({"foto": nombre, "etiqueta": None if pos == 0 else texto})
     return tomas
 
@@ -178,7 +172,7 @@ def main():
 
     for pos, k in enumerate(cur["orden"], start=1):
         f = cur["fotos"][k - 1]
-        print(f"{pos:2d}. {nombres[k - 1]:<24} {f['ambiente']:<16} {f['etiqueta']}")
+        print(f"{pos:2d}. {nombres[k - 1]:<24} {f['ambiente']}")
     for f in cur["fotos"]:
         if f["descartar"]:
             print(f"    descartada: {nombres[f['numero'] - 1]} — {f['motivo']}")
