@@ -211,7 +211,7 @@ def frases(palabras, max_palabras=None, max_chars=None, pausa=0.35):
     return grupos
 
 
-def escribir_ass(palabras, marca, ruta):
+def escribir_ass(palabras, marca, ruta, con_portada=False):
     """Subtítulos grandes, centrados en la parte baja; la palabra que se dice va en
     el color de la marca y un poco más grande."""
     resaltado = ass_color(marca)
@@ -239,7 +239,8 @@ def escribir_ass(palabras, marca, ruta):
                 partes.append(f"{{\\c{resaltado}\\fscx112\\fscy112}}{t}{{\\r}}" if k == j else t)
             pop = "{\\fad(60,0)}" if j == 0 else ""
             # en horizontal, mientras se ve la portada (abajo a la izquierda) van a la derecha
-            margenes = "820,60,0" if W > H and grupo[0]["inicio"] < 3.9 else "0,0,0"
+            margenes = ("820,60,0" if con_portada and W > H and grupo[0]["inicio"] < 3.9
+                        else "0,0,0")
             lineas.append(f"Dialogue: 0,{ass_tiempo(ini)},{ass_tiempo(fin)},Sub,,{margenes},,"
                           f"{pop}{' '.join(partes)}")
     with open(ruta, "w", encoding="utf-8") as fh:
@@ -254,12 +255,19 @@ def capas_finales(video, d, marca, subs_ass, tmp, salida):
     cadena = "[0:v]"
     filtros = []
     n = 1
-    portada = os.path.join(tmp, "portada.png")
-    rf.placa_portada(d, marca).save(portada)
-    entradas += ["-loop", "1", "-t", f"{total:.3f}", "-i", portada]
-    filtros.append(f"[{n}:v]format=rgba,fade=in:st=0.3:d=0.4:alpha=1,"
-                   f"fade=out:st=3.4:d=0.4:alpha=1[p]")
-    filtros.append(f"{cadena}[p]overlay=0:0:enable='lt(t,3.8)'[c1]")
+    if d.get("ficha", True):  # ficha fija arriba durante todo el video
+        ficha = os.path.join(tmp, "ficha.png")
+        rf.placa_ficha(d, marca).save(ficha)
+        entradas += ["-loop", "1", "-t", f"{total:.3f}", "-i", ficha]
+        filtros.append(f"[{n}:v]format=rgba,fade=in:st=0.15:d=0.5:alpha=1[p]")
+        filtros.append(f"{cadena}[p]overlay=0:0[c1]")
+    else:  # portada solo al principio
+        portada = os.path.join(tmp, "portada.png")
+        rf.placa_portada(d, marca).save(portada)
+        entradas += ["-loop", "1", "-t", f"{total:.3f}", "-i", portada]
+        filtros.append(f"[{n}:v]format=rgba,fade=in:st=0.3:d=0.4:alpha=1,"
+                       f"fade=out:st=3.4:d=0.4:alpha=1[p]")
+        filtros.append(f"{cadena}[p]overlay=0:0:enable='lt(t,3.8)'[c1]")
     cadena, n = "[c1]", n + 1
     logo = d.get("logo")
     if d.get("logo_pie", True) and logo and os.path.exists(logo):
@@ -390,7 +398,8 @@ def armar(clips, d, salida, objetivo=30.0, subtitulos=True, estilo_musica="calid
                             "texto": w["texto"]})
             if palabras_finales:
                 subs_ass = os.path.join(tmp, "subs.ass")
-                escribir_ass(palabras_finales, marca, subs_ass)
+                escribir_ass(palabras_finales, marca, subs_ass,
+                             con_portada=not d.get("ficha", True))
 
         # 6) capas: portada, logo, subtítulos
         con_capas = os.path.join(tmp, "capas.mp4")

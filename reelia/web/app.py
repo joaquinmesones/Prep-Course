@@ -378,6 +378,7 @@ def datos_del_formulario(f, carpeta, logo_actual=None):
         "whatsapp": f.get("whatsapp", "").strip(),
         "color_marca": f.get("color_marca", "#F40009"),
         "formato": "horizontal" if f.get("formato") == "horizontal" else "vertical",
+        "ficha": bool(f.get("ficha")),
     }
     logo = request.files.get("logo")
     if logo and logo.filename:

@@ -14,6 +14,9 @@
       <label>m² totales<input name="m2" inputmode="numeric" value="{{ d.m2_totales or '' }}"></label>
       <label class="check"><input type="checkbox" name="cochera" {{ 'checked' if d.cochera }}> Tiene cochera</label>
     </div>
+    <label class="check ia"><input type="checkbox" name="ficha" {{ 'checked' if d.get('ficha', True) }}>
+      <span><strong>Mostrar esta ficha durante todo el video</strong>
+      Operación, precio, tipo, ubicación y características quedan fijos arriba de principio a fin.</span></label>
   </section>
 
   <section class="tarjeta">

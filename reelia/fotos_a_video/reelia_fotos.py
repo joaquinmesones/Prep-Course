@@ -204,8 +204,8 @@ def placa_cierre(d, marca, fondo):
         cw, ch = lg.width + 2 * pad_x, lg.height + 2 * pad_y
         if horizontal:
             x0, y0 = int(W * 0.25 - cw / 2), (H - ch) // 2
-        else:
-            x0, y0 = (W - cw) // 2, 380
+        else:  # con la ficha arriba, el contenido del cierre baja un poco
+            x0, y0 = (W - cw) // 2, 470 if d.get("ficha", True) else 380
         dr.rounded_rectangle((x0, y0, x0 + cw, y0 + ch), radius=36, fill=(255, 255, 255, 250))
         base.alpha_composite(lg, (x0 + pad_x, y0 + pad_y))
         if not horizontal:
@@ -235,6 +235,103 @@ def placa_cierre(d, marca, fondo):
         centrado(d["inmobiliaria"], y, fuente(FUENTE_REG, 46), (200, 200, 200))
     dr.rectangle((0, H - 18, W, H), fill=marca + (255,))
     return base
+
+
+def caracteristicas(d):
+    """Lista corta de características para la ficha: '3 amb.', '2 dorm.', '78 m²'..."""
+    c = []
+    if d.get("ambientes"):
+        c.append(f"{d['ambientes']} amb.")
+    if d.get("dormitorios"):
+        c.append(f"{d['dormitorios']} dorm.")
+    if d.get("banos"):
+        c.append(f"{d['banos']} baño{'s' if d['banos'] != 1 else ''}")
+    if d.get("m2_totales"):
+        c.append(f"{d['m2_totales']} m²")
+    if d.get("cochera"):
+        c.append("Cochera")
+    return c
+
+
+def placa_ficha(d, marca):
+    """Ficha fija arriba, visible todo el video: operación + precio, tipo · ubicación
+    y características (ambientes, dormitorios, baños, m², cochera)."""
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    dr = ImageDraw.Draw(img)
+    horizontal = es_horizontal()
+    m = 44 if horizontal else 48                 # margen exterior
+    ancho = 820 if horizontal else W - 2 * m     # ancho del panel
+    pad = 30 if horizontal else 34
+    f_chip = fuente(FUENTE_BOLD, 34 if horizontal else 38)
+    f_precio = fuente(FUENTE_BOLD, 60 if horizontal else 70)
+    f_sub = fuente(FUENTE_SEMI, 36 if horizontal else 42)
+    f_car = fuente(FUENTE_SEMI, 32 if horizontal else 38)
+    interior = ancho - 2 * pad
+
+    op = d.get("operacion", "Venta").upper()
+    precio = formatear_precio(d) or "Consultá el precio"
+    sub = " · ".join(x for x in (str(d.get("tipo", "")).capitalize(), d.get("ubicacion", "")) if x)
+    # características en una o dos líneas según entren
+    lineas_car, actual = [], ""
+    for c in caracteristicas(d):
+        prueba = f"{actual}  ·  {c}" if actual else c
+        if dr.textlength(prueba, font=f_car) > interior and actual:
+            lineas_car.append(actual)
+            actual = c
+        else:
+            actual = prueba
+    if actual:
+        lineas_car.append(actual)
+
+    alto_chip = 58 if horizontal else 64
+    alto = pad + max(alto_chip, 74 if horizontal else 86)
+    if sub:
+        alto += 54 if horizontal else 62
+    alto += len(lineas_car) * (46 if horizontal else 54) + (8 if lineas_car else 0) + pad - 10
+    x0, y0 = m, m
+    dr.rounded_rectangle((x0, y0, x0 + ancho, y0 + alto), radius=30, fill=(12, 12, 14, 168))
+    dr.rectangle((x0, y0 + 26, x0 + 8, y0 + alto - 26), fill=marca + (255,))
+
+    x, y = x0 + pad, y0 + pad
+    tw = dr.textlength(op, font=f_chip)
+    dr.rounded_rectangle((x, y + 6, x + tw + 44, y + 6 + alto_chip), radius=alto_chip // 2,
+                         fill=marca + (255,))
+    dr.text((x + 22, y + 6 + (alto_chip - 38) // 2 - 2), op, font=f_chip, fill="white")
+    while dr.textlength(precio, font=f_precio) > interior - tw - 70 and f_precio.size > 36:
+        f_precio = fuente(FUENTE_BOLD, f_precio.size - 4)
+    dr.text((x + tw + 70, y - 2), precio, font=f_precio, fill="white")
+    y += (74 if horizontal else 86)
+    if sub:
+        while dr.textlength(sub, font=f_sub) > interior and f_sub.size > 26:
+            f_sub = fuente(FUENTE_SEMI, f_sub.size - 2)
+        dr.text((x, y), sub, font=f_sub, fill=(235, 235, 235))
+        y += 54 if horizontal else 62
+    if lineas_car:
+        y += 8
+        dr.line((x, y - 6, x + interior, y - 6), fill=(255, 255, 255, 60), width=2)
+        for linea in lineas_car:
+            dr.text((x, y + 2), linea, font=f_car, fill=(255, 255, 255))
+            y += 46 if horizontal else 54
+    return img
+
+
+def poner_capas_fijas(video, ficha_png, pie_png, hasta, salida):
+    """Ficha visible todo el video (aparece con un fundido) y logo al pie hasta el cierre."""
+    entradas, filtros, cadena, n = ["-i", video], [], "[0:v]", 1
+    if ficha_png:
+        entradas += ["-loop", "1", "-i", ficha_png]
+        filtros.append(f"[{n}:v]format=rgba,fade=in:st=0.15:d=0.5:alpha=1[fi]")
+        filtros.append(f"{cadena}[fi]overlay=0:0:shortest=1[c{n}]")
+        cadena, n = f"[c{n}]", n + 1
+    if pie_png:
+        entradas += ["-loop", "1", "-i", pie_png]
+        filtros.append(f"[{n}:v]format=rgba[pi]")
+        filtros.append(f"{cadena}[pi]overlay=0:0:shortest=1:enable='lt(t,{hasta:.3f})'[c{n}]")
+        cadena, n = f"[c{n}]", n + 1
+    filtros.append(f"{cadena}format=yuv420p[v]")
+    run(["ffmpeg", "-y", "-v", "error", *entradas, "-filter_complex", ";".join(filtros),
+         "-map", "[v]", "-c:v", "libx264", "-preset", "medium", "-crf", "20",
+         "-pix_fmt", "yuv420p", "-movflags", "+faststart", salida])
 
 
 def placa_pie_logo(logo):
@@ -451,7 +548,9 @@ def main():
     marca = hex_a_rgb(d.get("color_marca", "#F40009"))
     tmp = tempfile.mkdtemp(prefix="reelia_")
     try:
-        etiquetas = datos_por_toma(d)
+        ficha = d.get("ficha", True)  # por defecto la ficha va fija todo el video
+        # con ficha, los datos ya se ven siempre: solo se muestran los textos del usuario
+        etiquetas = [] if ficha else datos_por_toma(d)
         tomas, segs = [], []
         seg = a.segundos_por_foto
         # si hay voz, estiramos las tomas para que el video dure lo mismo que la voz
@@ -465,8 +564,9 @@ def main():
             preparar_foto(foto, limpia)
             ov = None
             if i == 0:
-                ov = os.path.join(tmp, f"ov_{i}.png")
-                placa_portada(d, marca).save(ov)
+                if not ficha:
+                    ov = os.path.join(tmp, f"ov_{i}.png")
+                    placa_portada(d, marca).save(ov)
             elif etiquetas_fijas is not None:
                 if etiquetas_fijas[i]:
                     ov = os.path.join(tmp, f"ov_{i}.png")
@@ -494,13 +594,18 @@ def main():
         mudo = os.path.join(tmp, "mudo.mp4")
         unir_con_transiciones(tomas, segs, mudo)
         logo = d.get("logo")
+        pie_png = ficha_png = None
         if d.get("logo_pie", True) and logo and os.path.exists(logo):
             pie_png = os.path.join(tmp, "pie.png")
             placa_pie_logo(logo).save(pie_png)
-            con_pie = os.path.join(tmp, "con_pie.mp4")
+        if ficha:
+            ficha_png = os.path.join(tmp, "ficha.png")
+            placa_ficha(d, marca).save(ficha_png)
+        if pie_png or ficha_png:
+            con_capas = os.path.join(tmp, "con_capas.mp4")
             # el cierre ya muestra el logo grande: el pie se va cuando empieza el fundido
-            poner_pie_logo(mudo, pie_png, duracion(mudo) - 3.5, con_pie)
-            mudo = con_pie
+            poner_capas_fijas(mudo, ficha_png, pie_png, duracion(mudo) - 3.5, con_capas)
+            mudo = con_capas
         musica = a.musica
         if not musica and a.estilo_musica != "ninguno":
             musica = os.path.join(tmp, "musica.mp3")
