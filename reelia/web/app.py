@@ -35,6 +35,9 @@ LOGO_DEFECTO = os.environ.get("REELIA_LOGO_DEFECTO",
 MOTOR = os.environ.get("REELIA_MOTOR",
                        os.path.join(BASE, "..", "fotos_a_video", "reelia_fotos.py"))
 EXT_FOTOS = {".jpg", ".jpeg", ".png", ".webp"}
+EXT_CLIPS = {".mp4", ".mov", ".m4v", ".webm", ".avi", ".mkv", ".3gp"}
+MAX_CLIPS = 10
+MOTOR_VIDEOS = os.path.join(os.path.dirname(MOTOR), "reelia_videos.py")
 sys.path.insert(0, os.path.dirname(MOTOR))  # para importar el curador de fotos
 
 
@@ -45,7 +48,7 @@ MAX_FOTOS = 15
 app = Flask(__name__)
 app.config.update(
     SECRET_KEY=os.environ.get("REELIA_SECRET_KEY") or secrets.token_hex(32),
-    MAX_CONTENT_LENGTH=200 * 1024 * 1024,  # 200 MB por envío
+    MAX_CONTENT_LENGTH=1024 * 1024 * 1024,  # 1 GB por envío (clips de video)
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=os.environ.get("REELIA_HTTPS", "1") == "1",
@@ -160,6 +163,12 @@ def cabeceras(r):
     r.headers["X-Content-Type-Options"] = "nosniff"
     r.headers["Referrer-Policy"] = "same-origin"
     return r
+
+
+@app.route("/favicon.ico")
+def favicon():
+    return send_file(os.path.join(BASE, "static", "marca", "favicon.ico"),
+                     mimetype="image/vnd.microsoft.icon", max_age=86400)
 
 
 # ------------------------------------------------------------------- acceso
@@ -286,10 +295,13 @@ def nuevo():
             marca = {k: d.get(k) for k in ("inmobiliaria", "asesor", "whatsapp", "color_marca")}
             if (marca.get("color_marca") or "").upper() == "#C8742B":  # color viejo por defecto
                 marca["color_marca"] = None
-        return render_template("nuevo.html", marca=marca, ia=ia_disponible(),
+        modo = "videos" if request.args.get("modo") == "videos" else "fotos"
+        return render_template("nuevo.html", marca=marca, ia=ia_disponible(), modo=modo,
                                logo_defecto=os.path.exists(LOGO_DEFECTO))
 
     f = request.form
+    if f.get("modo") == "videos":
+        return nuevo_desde_videos(f)
     fotos = [x for x in request.files.getlist("fotos") if x and x.filename]
     if not fotos:
         flash("Subí al menos una foto.", "error")
@@ -314,7 +326,14 @@ def nuevo():
         etiqueta = etiquetas[i].strip()[:40] if i < len(etiquetas) else ""
         tomas.append({"foto": nombre, "etiqueta": None if i == 0 else (etiqueta or None)})
 
-    logo = request.files.get("logo")
+    datos = datos_del_formulario(f, carpeta)
+    datos["tomas"] = tomas
+    datos["ia"] = bool(f.get("ia")) and ia_disponible()
+    return encolar(vid, carpeta, datos, f)
+
+
+def datos_del_formulario(f, carpeta):
+    """Datos de la propiedad y de la marca, comunes a los dos modos."""
     datos = {
         "operacion": f.get("operacion", "Venta"),
         "tipo": f.get("tipo", "").strip() or "propiedad",
@@ -330,9 +349,8 @@ def nuevo():
         "asesor": f.get("asesor", "").strip(),
         "whatsapp": f.get("whatsapp", "").strip(),
         "color_marca": f.get("color_marca", "#F40009"),
-        "tomas": tomas,
-        "ia": bool(f.get("ia")) and ia_disponible(),
     }
+    logo = request.files.get("logo")
     if logo and logo.filename:
         ext = os.path.splitext(secure_filename(logo.filename))[1].lower()
         if ext in {".png", ".jpg", ".jpeg", ".webp"}:
@@ -340,9 +358,12 @@ def nuevo():
             datos["logo"] = os.path.join(carpeta, "logo" + ext)
     if "logo" not in datos and os.path.exists(LOGO_DEFECTO):
         datos["logo"] = LOGO_DEFECTO  # logo de la inmobiliaria por defecto
+    return datos
+
+
+def encolar(vid, carpeta, datos, f):
     with open(os.path.join(carpeta, "propiedad.json"), "w", encoding="utf-8") as fh:
         json.dump(datos, fh, ensure_ascii=False, indent=2)
-
     titulo = " · ".join(x for x in (datos["tipo"].capitalize(), datos["ubicacion"]) if x)
     estilo = f.get("musica", "calido")
     if estilo not in ("calido", "moderno", "sereno", "ninguno"):
@@ -355,6 +376,39 @@ def nuevo():
     return redirect(url_for("ver_video", vid=vid))
 
 
+def nuevo_desde_videos(f):
+    clips = [x for x in request.files.getlist("clips") if x and x.filename]
+    if not clips:
+        flash("Subí al menos un video.", "error")
+        return redirect(url_for("nuevo", modo="videos"))
+    if len(clips) > MAX_CLIPS:
+        flash(f"Máximo {MAX_CLIPS} videos por edición.", "error")
+        return redirect(url_for("nuevo", modo="videos"))
+    vid = uuid.uuid4().hex[:12]
+    carpeta = carpeta_video(vid)
+    os.makedirs(os.path.join(carpeta, "clips"))
+    nombres = []
+    for i, clip in enumerate(clips):
+        ext = os.path.splitext(secure_filename(clip.filename))[1].lower()
+        if ext not in EXT_CLIPS:
+            shutil.rmtree(carpeta, ignore_errors=True)
+            flash("Formato no permitido. Usá MP4, MOV, M4V o WEBM.", "error")
+            return redirect(url_for("nuevo", modo="videos"))
+        nombre = f"{i:02d}{ext}"
+        clip.save(os.path.join(carpeta, "clips", nombre))
+        nombres.append(nombre)
+    datos = datos_del_formulario(f, carpeta)
+    objetivo = f.get("objetivo", "30")
+    datos.update({
+        "modo": "videos",
+        "clips": nombres,
+        "objetivo": int(objetivo) if objetivo in ("15", "30", "45", "60") else 30,
+        "subtitulos": bool(f.get("subtitulos")),
+        "ambiente": bool(f.get("ambiente")),
+    })
+    return encolar(vid, carpeta, datos, f)
+
+
 def renderizar(vid, estilo):
     carpeta = carpeta_video(vid)
     c = db_suelta()
@@ -364,12 +418,24 @@ def renderizar(vid, estilo):
         datos = json.load(fh)
     if datos.get("ia"):
         curar_con_ia(carpeta, datos)
+    if datos.get("modo") == "videos":
+        cmd = [sys.executable, MOTOR_VIDEOS,
+               "--clips", *[os.path.join(carpeta, "clips", n) for n in datos["clips"]],
+               "--objetivo", str(datos.get("objetivo", 30)),
+               "--informe", os.path.join(carpeta, "informe.json")]
+        if not datos.get("subtitulos", True):
+            cmd.append("--sin-subtitulos")
+        if datos.get("ambiente"):
+            cmd.append("--con-ambiente")
+        limite = 3600
+    else:
+        cmd = [sys.executable, MOTOR, "--fotos", os.path.join(carpeta, "fotos"),
+               "--segundos-por-foto", "3.4"]
+        limite = 900
+    cmd += ["--datos", os.path.join(carpeta, "propiedad.json"),
+            "--salida", os.path.join(carpeta, "video.mp4"), "--estilo-musica", estilo]
     try:
-        r = subprocess.run([sys.executable, MOTOR, "--fotos", os.path.join(carpeta, "fotos"),
-                            "--datos", os.path.join(carpeta, "propiedad.json"),
-                            "--salida", os.path.join(carpeta, "video.mp4"),
-                            "--estilo-musica", estilo, "--segundos-por-foto", "3.4"],
-                           capture_output=True, text=True, timeout=900)
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=limite)
         if r.returncode != 0:
             raise RuntimeError(r.stderr[-1500:] or r.stdout[-1500:])
         c.execute("UPDATE videos SET estado='listo', terminado=? WHERE id=?", (time.time(), vid))
@@ -431,7 +497,12 @@ def foto_video(vid, nombre):
 @login_requerido
 def ver_video(vid):
     v = video_del_usuario(vid)
-    return render_template("video.html", v=v, curacion=leer_curacion(v["id"]))
+    informe = None
+    ruta = os.path.join(carpeta_video(v["id"]), "informe.json")
+    if os.path.exists(ruta):
+        with open(ruta, encoding="utf-8") as fh:
+            informe = json.load(fh)
+    return render_template("video.html", v=v, curacion=leer_curacion(v["id"]), informe=informe)
 
 
 @app.route("/video/<vid>/archivo")
@@ -462,7 +533,7 @@ def borrar_video(vid):
 
 @app.errorhandler(413)
 def muy_grande(_):
-    flash("Las fotos pesan demasiado (máximo 200 MB en total).", "error")
+    flash("Los archivos pesan demasiado (máximo 1 GB en total).", "error")
     return redirect(url_for("nuevo"))
 
 

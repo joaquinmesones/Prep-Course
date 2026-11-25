@@ -66,6 +66,15 @@ read -s -p "Clave de Anthropic: " K && echo && sed -i '/^ANTHROPIC_API_KEY=/d' /
 ```
 Sin clave, la plataforma funciona igual y la opción de IA no aparece.
 
+## 9. Modo "Desde videos" (Whisper para subtítulos)
+Instala la transcripción y deja descargado el modelo (≈470 MB, una sola vez), y permite subir hasta 1 GB:
+```bash
+/opt/reelia/.venv/bin/pip install -q -r /opt/reelia/reelia/web/requirements.txt
+sudo -u reelia /opt/reelia/.venv/bin/python -c "from faster_whisper import WhisperModel; WhisperModel('small', device='cpu', compute_type='int8')"
+cp /opt/reelia/reelia/web/despliegue/nginx-videolabs.conf /etc/nginx/conf.d/videolabs.conf  # (certbot: volver a correr si se pisa el bloque HTTPS)
+```
+Para otro tamaño de modelo: `REELIA_WHISPER_MODELO=base` (más rápido) o `medium` (más preciso) en `/etc/reelia.env`.
+
 ## Actualizar a una versión nueva
 ```bash
 cd /opt/reelia/src && sudo -u reelia git pull && /opt/reelia/.venv/bin/pip install -q -r /opt/reelia/reelia/web/requirements.txt && systemctl restart reelia

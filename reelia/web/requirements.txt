@@ -4,3 +4,4 @@ Pillow
 numpy
 scipy
 anthropic>=2.13
+faster-whisper>=1.1

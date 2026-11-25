@@ -1,4 +1,12 @@
-# Reelia — Modo 2: Fotos a video (prototipo)
+# VideoLabs — motores de video
+
+- **Modo 1 — Video a video** (`reelia_videos.py`): clips del celular → Reel 9:16. Detecta voz con Whisper (`reelia_transcribir.py`), corta pausas, subtítulos palabra por palabra, recorridos recortados a la duración objetivo, horizontal → vertical con fondo desenfocado, color, portada, logo, cierre y música que baja cuando alguien habla.
+  ```bash
+  python3 reelia_videos.py --clips a.mp4 b.mov --datos propiedad.json --salida reel.mp4 --objetivo 30
+  ```
+- **Modo 2 — Fotos a video** (`reelia_fotos.py`), detallado abajo.
+
+# Modo 2: Fotos a video
 
 Convierte las fotos de una propiedad + sus datos en un video vertical (1080x1920) para Reels, Historias y Ads.
 

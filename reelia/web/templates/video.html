@@ -9,7 +9,7 @@
     {% elif v.estado == 'error' %}
       <div class="ph error">No se pudo generar el video</div>
     {% else %}
-      <div class="ph cargando"><div class="spinner"></div>Armando tu video…<small>Tarda 1 o 2 minutos{% if v.datos and '"ia": true' in v.datos %} (la IA está ordenando las fotos){% endif %}</small></div>
+      <div class="ph cargando"><div class="spinner"></div>Armando tu video…<small>{% if v.datos and '"modo": "videos"' in v.datos %}Editar videos tarda varios minutos{% else %}Tarda 1 o 2 minutos{% endif %}{% if v.datos and '"ia": true' in v.datos %} (la IA está ordenando las fotos){% endif %}</small></div>
     {% endif %}
   </div>
   <div class="tarjeta lateral">
@@ -28,6 +28,19 @@
     {% endif %}
   </div>
 </div>
+{% if informe %}
+<section class="tarjeta curacion">
+  <h2>Cómo se editó</h2>
+  <ul class="informe">
+    {% for c in informe.clips %}
+    <li><span class="chip {{ 'gris' if c.tipo == 'recorrido' }}">{{ 'Con voz' if c.tipo == 'voz' else 'Recorrido' }}</span>
+      <strong>Video {{ loop.index }}</strong> · {{ c.duracion }} s originales → {{ c.usado }} s usados{% if c.cortes %} · {{ c.cortes }} pausa{{ 's' if c.cortes != 1 }} cortada{{ 's' if c.cortes != 1 }}{% endif %}
+      {% if c.texto %}<p class="nota">“{{ c.texto }}”</p>{% endif %}</li>
+    {% endfor %}
+  </ul>
+  <p class="nota">Duración final: {{ informe.duracion_final }} s{% if informe.subtitulos %} · con subtítulos{% endif %}</p>
+</section>
+{% endif %}
 {% if curacion and curacion.orden %}
 <section class="tarjeta curacion">
   <h2>Cómo ordenó la IA las fotos</h2>

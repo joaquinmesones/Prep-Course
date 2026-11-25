@@ -2,9 +2,33 @@
 {% block titulo %}Nuevo video{% endblock %}
 {% block contenido %}
 <h1>Nuevo video de propiedad</h1>
+<nav class="modos">
+  <a href="{{ url_for('nuevo') }}" class="{{ 'activo' if modo == 'fotos' }}"><strong>Desde fotos</strong><span>Subís fotos y se arma un recorrido con movimiento</span></a>
+  <a href="{{ url_for('nuevo', modo='videos') }}" class="{{ 'activo' if modo == 'videos' }}"><strong>Desde videos</strong><span>Subís lo que filmaste con el celular y se edita solo</span></a>
+</nav>
 <form method="post" enctype="multipart/form-data" id="form-nuevo">
   <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="modo" value="{{ modo }}">
 
+  {% if modo == 'videos' %}
+  <section class="tarjeta">
+    <h2><span class="paso">1</span> Videos</h2>
+    <p class="nota">Subí hasta 10 videos del celular, en el orden en que querés que aparezcan (podés reordenarlos). Pueden ser recorridos de la propiedad o el asesor hablando a cámara: VideoLabs detecta cuál es cuál.</p>
+    <label class="zona" id="zona">
+      <input type="file" id="clips" name="clips" accept="video/*" multiple>
+      <strong>Tocá o arrastrá los videos acá</strong>
+      <span>MP4, MOV o WEBM · hasta 1 GB en total</span>
+    </label>
+    <ol class="clips" id="lista"></ol>
+    <div class="campos opciones-video">
+      <label>Duración aproximada
+        <select name="objetivo"><option value="15">15 segundos</option><option value="30" selected>30 segundos</option><option value="45">45 segundos</option><option value="60">60 segundos</option></select></label>
+      <label class="check"><input type="checkbox" name="subtitulos" checked> Subtítulos automáticos cuando alguien habla</label>
+      <label class="check"><input type="checkbox" name="ambiente"> Mantener el sonido original en los recorridos</label>
+    </div>
+    <p class="nota">Cuando alguien habla, VideoLabs corta las pausas y silencios y pone subtítulos palabra por palabra. Los recorridos se recortan para llegar a la duración elegida.</p>
+  </section>
+  {% else %}
   <section class="tarjeta">
     <h2><span class="paso">1</span> Fotos</h2>
     <p class="nota">Subí entre 4 y 15 fotos. {% if ia %}Si dejás activada la IA, ella elige la portada y el orden. Si no, arrastralas para ordenar el recorrido: la primera es la portada.{% else %}Arrastralas para ordenar el recorrido: la primera es la portada.{% endif %} Podés escribir un texto corto para cada una (ej. "Cocina integrada").</p>
@@ -20,6 +44,7 @@
       Detecta cada ambiente, descarta las repetidas o malas y arma el recorrido. Los textos que escribas vos se respetan.</span></label>
     {% endif %}
   </section>
+  {% endif %}
 
   <section class="tarjeta">
     <h2><span class="paso">2</span> Datos de la propiedad</h2>
@@ -64,5 +89,5 @@
 
   <button class="btn grande" id="enviar">Crear video</button>
 </form>
-<script src="{{ url_for('static', filename='nuevo.js') }}"></script>
+<script src="{{ url_for('static', filename='clips.js' if modo == 'videos' else 'nuevo.js') }}"></script>
 {% endblock %}
