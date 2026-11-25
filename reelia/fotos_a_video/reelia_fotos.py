@@ -132,19 +132,19 @@ def placa_portada(d, marca):
     op = d.get("operacion", "Venta").upper()
     f_chip = fuente(FUENTE_BOLD, 44)
     tw = dr.textlength(op, font=f_chip)
-    x, y = 80, 1240
+    x, y = 80, 1160
     dr.rounded_rectangle((x, y, x + tw + 60, y + 84), radius=42, fill=marca + (255,))
     dr.text((x + 30, y + 16), op, font=f_chip, fill="white")
 
     precio = formatear_precio(d)
     if precio:
-        dr.text((80, 1350), precio, font=fuente(FUENTE_BOLD, 112), fill="white")
+        dr.text((80, 1270), precio, font=fuente(FUENTE_BOLD, 112), fill="white")
     else:
-        dr.text((80, 1370), "Consultá el precio", font=fuente(FUENTE_BOLD, 92), fill="white")
+        dr.text((80, 1290), "Consultá el precio", font=fuente(FUENTE_BOLD, 92), fill="white")
     if d.get("ubicacion"):
-        dr.text((84, 1500), d["ubicacion"], font=fuente(FUENTE_SEMI, 54), fill=(235, 235, 235))
+        dr.text((84, 1420), d["ubicacion"], font=fuente(FUENTE_SEMI, 54), fill=(235, 235, 235))
     if d.get("tipo"):
-        dr.text((84, 1575), d["tipo"].capitalize(), font=fuente(FUENTE_REG, 46), fill=(210, 210, 210))
+        dr.text((84, 1495), d["tipo"].capitalize(), font=fuente(FUENTE_REG, 46), fill=(210, 210, 210))
     return img
 
 
@@ -155,7 +155,7 @@ def placa_dato(texto, marca):
     f = fuente(FUENTE_BOLD, 58)
     tw = dr.textlength(texto, font=f)
     x0 = (W - tw) / 2 - 48
-    y0 = 1560
+    y0 = 1500
     dr.rounded_rectangle((x0 + 6, y0 + 8, x0 + tw + 102, y0 + 128), radius=30, fill=(0, 0, 0, 90))
     dr.rounded_rectangle((x0, y0, x0 + tw + 96, y0 + 120), radius=30, fill=(255, 255, 255, 240))
     dr.rectangle((x0, y0 + 20, x0 + 10, y0 + 100), fill=marca + (255,))
@@ -177,9 +177,13 @@ def placa_cierre(d, marca, fondo):
     logo = d.get("logo")
     if logo and os.path.exists(logo):
         lg = Image.open(logo).convert("RGBA")
-        lg.thumbnail((520, 260))
-        base.alpha_composite(lg, ((W - lg.width) // 2, 420))
-        y = 420 + lg.height + 80
+        lg.thumbnail((760, 300))
+        pad_x, pad_y = 56, 44
+        cw, ch = lg.width + 2 * pad_x, lg.height + 2 * pad_y
+        x0, y0 = (W - cw) // 2, 380
+        dr.rounded_rectangle((x0, y0, x0 + cw, y0 + ch), radius=36, fill=(255, 255, 255, 250))
+        base.alpha_composite(lg, (x0 + pad_x, y0 + pad_y))
+        y = y0 + ch + 90
     elif d.get("inmobiliaria"):
         centrado(d["inmobiliaria"], y, fuente(FUENTE_BOLD, 76), "white")
         y += 150
@@ -205,6 +209,31 @@ def placa_cierre(d, marca, fondo):
         centrado(d["inmobiliaria"], y, fuente(FUENTE_REG, 46), (200, 200, 200))
     dr.rectangle((0, H - 18, W, H), fill=marca + (255,))
     return base
+
+
+def placa_pie_logo(logo):
+    """Franja blanca redondeada con el logo, abajo al centro, para todas las tomas."""
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    lg = Image.open(logo).convert("RGBA")
+    lg.thumbnail((420, 92))
+    pad_x, pad_y = 34, 20
+    cw, ch = lg.width + 2 * pad_x, lg.height + 2 * pad_y
+    x0, y0 = (W - cw) // 2, H - ch - 64
+    dr = ImageDraw.Draw(img)
+    dr.rounded_rectangle((x0 + 4, y0 + 6, x0 + cw + 4, y0 + ch + 6), radius=26, fill=(0, 0, 0, 70))
+    dr.rounded_rectangle((x0, y0, x0 + cw, y0 + ch), radius=26, fill=(255, 255, 255, 245))
+    img.alpha_composite(lg, (x0 + pad_x, y0 + pad_y))
+    return img
+
+
+def poner_pie_logo(video, png, hasta, salida):
+    """Superpone el logo fijo desde el inicio hasta el comienzo del cierre."""
+    run(["ffmpeg", "-y", "-v", "error", "-i", video, "-loop", "1", "-i", png,
+         "-filter_complex",
+         f"[1:v]format=rgba[l];[0:v][l]overlay=0:0:shortest=1:enable='lt(t,{hasta:.3f})',"
+         "format=yuv420p[v]",
+         "-map", "[v]", "-c:v", "libx264", "-preset", "medium", "-crf", "20",
+         "-pix_fmt", "yuv420p", "-movflags", "+faststart", salida])
 
 
 def datos_por_toma(d):
@@ -411,6 +440,14 @@ def main():
 
         mudo = os.path.join(tmp, "mudo.mp4")
         unir_con_transiciones(tomas, segs, mudo)
+        logo = d.get("logo")
+        if d.get("logo_pie", True) and logo and os.path.exists(logo):
+            pie_png = os.path.join(tmp, "pie.png")
+            placa_pie_logo(logo).save(pie_png)
+            con_pie = os.path.join(tmp, "con_pie.mp4")
+            # el cierre ya muestra el logo grande: el pie se va cuando empieza el fundido
+            poner_pie_logo(mudo, pie_png, duracion(mudo) - 3.5, con_pie)
+            mudo = con_pie
         musica = a.musica
         if not musica and a.estilo_musica != "ninguno":
             musica = os.path.join(tmp, "musica.mp3")

@@ -30,6 +30,8 @@ from werkzeug.utils import secure_filename
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATOS = os.environ.get("REELIA_DATOS", os.path.join(BASE, "datos"))
+LOGO_DEFECTO = os.environ.get("REELIA_LOGO_DEFECTO",
+                              os.path.join(BASE, "static", "marca", "logo_defecto.png"))
 MOTOR = os.environ.get("REELIA_MOTOR",
                        os.path.join(BASE, "..", "fotos_a_video", "reelia_fotos.py"))
 EXT_FOTOS = {".jpg", ".jpeg", ".png", ".webp"}
@@ -284,7 +286,8 @@ def nuevo():
             marca = {k: d.get(k) for k in ("inmobiliaria", "asesor", "whatsapp", "color_marca")}
             if (marca.get("color_marca") or "").upper() == "#C8742B":  # color viejo por defecto
                 marca["color_marca"] = None
-        return render_template("nuevo.html", marca=marca, ia=ia_disponible())
+        return render_template("nuevo.html", marca=marca, ia=ia_disponible(),
+                               logo_defecto=os.path.exists(LOGO_DEFECTO))
 
     f = request.form
     fotos = [x for x in request.files.getlist("fotos") if x and x.filename]
@@ -335,6 +338,8 @@ def nuevo():
         if ext in {".png", ".jpg", ".jpeg", ".webp"}:
             logo.save(os.path.join(carpeta, "logo" + ext))
             datos["logo"] = os.path.join(carpeta, "logo" + ext)
+    if "logo" not in datos and os.path.exists(LOGO_DEFECTO):
+        datos["logo"] = LOGO_DEFECTO  # logo de la inmobiliaria por defecto
     with open(os.path.join(carpeta, "propiedad.json"), "w", encoding="utf-8") as fh:
         json.dump(datos, fh, ensure_ascii=False, indent=2)
 

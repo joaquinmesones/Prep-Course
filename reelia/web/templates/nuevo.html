@@ -45,7 +45,9 @@
       <label>Asesor<input name="asesor" value="{{ marca.asesor or '' }}"></label>
       <label>WhatsApp<input name="whatsapp" value="{{ marca.whatsapp or '' }}" placeholder="+54 9 11 …"></label>
       <label>Color de marca<input type="color" name="color_marca" value="{{ marca.color_marca or '#F40009' }}"></label>
-      <label class="doble">Logo (opcional, PNG con fondo transparente)<input type="file" name="logo" accept="image/png,image/jpeg,image/webp"></label>
+      <label class="doble">{% if logo_defecto %}Logo — ya se usa este por defecto. Subí otro solo si querés cambiarlo para este video{% else %}Logo (opcional, PNG con fondo transparente){% endif %}
+        {% if logo_defecto %}<img class="logo-defecto" src="{{ url_for('static', filename='marca/logo_defecto.png') }}" alt="Logo por defecto">{% endif %}
+        <input type="file" name="logo" accept="image/png,image/jpeg,image/webp"></label>
     </div>
   </section>
 
