@@ -142,7 +142,8 @@ td { padding: 10px 6px; border-bottom: 1px solid var(--borde); vertical-align: m
 .chip.gris { background: var(--borde); color: var(--suave); }
 
 /* marca VideoLabs */
-.logo .lema { font-size: .72rem; font-weight: 500; color: var(--suave); letter-spacing: 0; margin-left: 4px; padding-left: 10px; border-left: 1px solid var(--borde); }
+.logo .lema { display: flex; flex-direction: column; line-height: 1.25; font-size: .72rem; font-weight: 500; color: var(--suave); letter-spacing: 0; margin-left: 4px; padding-left: 10px; border-left: 1px solid var(--borde); }
+.logo .lema .autor { font-size: .66rem; font-weight: 400; opacity: .85; }
 @media (max-width: 560px) { .logo .lema { display: none; } }
 .pie { text-align: center; color: var(--suave); font-size: .8rem; padding: 0 16px 28px; }
 .centrado + .pie { display: none; }
