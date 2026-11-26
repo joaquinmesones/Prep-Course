@@ -43,7 +43,7 @@ def _pedido(metodo, ruta, cuerpo=None, timeout=120):
             info = json.loads(detalle).get("detail") or {}
             estado = info.get("status", "") if isinstance(info, dict) else ""
             mensaje = info.get("message", "") if isinstance(info, dict) else str(info)
-        except ValueError:
+        except (ValueError, AttributeError):
             estado, mensaje = "", detalle
         if "permission" in (estado + mensaje).lower():
             raise ErrorVoz("A la clave de ElevenLabs le falta un permiso. Editala en ElevenLabs → "
