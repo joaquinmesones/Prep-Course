@@ -545,11 +545,18 @@ def renderizar(vid, estilo):
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=limite)
         if r.returncode != 0:
-            raise RuntimeError(r.stderr[-1500:] or r.stdout[-1500:])
+            detalle = (r.stderr or "")[-1500:] or (r.stdout or "")[-1500:]
+            if r.returncode < 0:  # lo cortó el sistema (p. ej. por falta de memoria)
+                detalle = (f"El sistema interrumpió el armado (señal {-r.returncode}"
+                           f"{', probablemente falta de memoria' if -r.returncode == 9 else ''}).\n"
+                           + detalle)
+            raise RuntimeError(detalle or f"El motor terminó con código {r.returncode} sin mensaje.")
         os.replace(nuevo, os.path.join(carpeta, "video.mp4"))  # el anterior queda hasta acá
         c.execute("UPDATE videos SET estado='listo', terminado=? WHERE id=?", (time.time(), vid))
     except Exception as e:  # noqa: BLE001 — guardamos el error para mostrarlo
-        c.execute("UPDATE videos SET estado='error', error=? WHERE id=?", (str(e)[-1500:], vid))
+        texto = str(e) or repr(e)
+        app.logger.error("Video %s falló: %s", vid, texto[-500:])
+        c.execute("UPDATE videos SET estado='error', error=? WHERE id=?", (texto[-1500:], vid))
     c.commit()
     c.close()
 
