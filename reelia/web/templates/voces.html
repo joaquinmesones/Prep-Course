@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block titulo %}Voces{% endblock %}
+{% block contenido %}
+<h1>Voces para la voz en off</h1>
+<div class="dos-col">
+  <div class="tarjeta">
+    <h2>Agregar una voz</h2>
+    <form method="post">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="accion" value="agregar">
+      <label>Nombre<input name="nombre" placeholder="Ej: Mateo (hombre)" required></label>
+      <label>ID de la voz en ElevenLabs<input name="voice_id" placeholder="Ej: 21m00Tcm4TlvDq8ikWAM" required></label>
+      <label>Descripción <small class="nota">(opcional)</small><input name="descripcion" placeholder="Ej: Cálida, acento porteño"></label>
+      <button class="btn">Agregar voz</button>
+    </form>
+    <div class="nota ayuda">
+      <p><strong>¿Dónde está el ID?</strong></p>
+      <ol>
+        <li>En ElevenLabs entrá a <strong>Voces</strong> (o Voice Library) y buscá “Argentina”.</li>
+        <li>Abrí la voz que te guste: tocá los <strong>tres puntitos (⋯)</strong> → <strong>“Copy voice ID”</strong> (o el ícono de copiar al lado del ID).</li>
+        <li>Pegalo acá con un nombre que reconozcas.</li>
+      </ol>
+    </div>
+  </div>
+  <div class="tarjeta">
+    <h2>Voces cargadas</h2>
+    {% if not lista %}<p class="nota">Todavía no hay voces. Agregá 2 o 3 (por ejemplo una de hombre y una de mujer): son las que van a ver los asesores al crear un video.</p>{% endif %}
+    <table>
+      {% for v in lista %}
+      <tr>
+        <td><strong>{{ v.nombre }}</strong><br><span class="nota">{{ v.descripcion or '' }} <code>{{ v.voice_id }}</code></span></td>
+        <td><button type="button" class="escuchar btn chico" data-src="{{ url_for('voz_muestra', vid=v.id) }}">▶ Escuchar</button></td>
+        <td><form method="post" class="enlinea" onsubmit="return confirm('¿Quitar esta voz?')">
+          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="accion" value="borrar"><input type="hidden" name="id" value="{{ v.id }}">
+          <button class="link">Quitar</button></form></td>
+      </tr>
+      {% endfor %}
+    </table>
+    <p class="nota">La primera vez que tocás ▶ Escuchar se genera una frase corta de prueba (usa unos pocos créditos) y después queda guardada.</p>
+  </div>
+</div>
+<script src="{{ url_for('static', filename='escuchar.js') }}"></script>
+{% endblock %}

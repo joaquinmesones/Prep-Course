@@ -230,3 +230,7 @@ textarea { font: inherit; width: 100%; padding: 10px 12px; border-radius: 10px; 
 textarea:focus { outline: 2px solid var(--marca); outline-offset: 1px; }
 .guion-pie { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
 .guion-pie .btn { margin: 0; }
+.ayuda { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--borde); }
+.ayuda ol { padding-left: 20px; margin: 6px 0 0; }
+.ayuda li { margin-bottom: 4px; }
+code { font-size: .78rem; background: var(--fondo); padding: 1px 6px; border-radius: 6px; }

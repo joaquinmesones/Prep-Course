@@ -65,16 +65,25 @@ _voces_cache = {"t": 0, "voces": [], "error": None}
 
 
 def voces_cuenta():
-    """Voces de la cuenta de ElevenLabs (se consultan cada 10 minutos como mucho)."""
+    """Voces para elegir. Si el administrador cargó voces en VideoLabs, se usan esas;
+    si no, se intenta leer "My Voices" de la cuenta de ElevenLabs (cada 10 minutos)."""
     if not voz_disponible():
         return [], None
+    propias = db().execute("SELECT * FROM voces ORDER BY nombre").fetchall()
+    if propias:
+        return [{"id": v["voice_id"], "nombre": v["nombre"], "descripcion": v["descripcion"] or "",
+                 "muestra": url_for("voz_muestra", vid=v["id"])} for v in propias], None
     if time.time() - _voces_cache["t"] > 600 or _voces_cache["error"]:
         try:
             import reelia_voz
             _voces_cache.update(t=time.time(), voces=reelia_voz.listar_voces(), error=None)
         except Exception as e:  # noqa: BLE001
-            _voces_cache.update(t=time.time(), error=str(e))
-    return _voces_cache["voces"], _voces_cache["error"]
+            _voces_cache.update(t=time.time(), voces=[], error=str(e))
+    error = _voces_cache["error"]
+    if error and "permiso" in error:
+        error = ("Todavía no hay voces cargadas. Un administrador puede agregarlas en "
+                 "“Voces” (menú de arriba) con el ID de cada voz de ElevenLabs.")
+    return _voces_cache["voces"], error
 MAX_FOTOS = 15
 
 app = Flask(__name__)
@@ -122,6 +131,10 @@ CREATE TABLE IF NOT EXISTS videos (
   estado TEXT, error TEXT, datos TEXT, creado REAL, terminado REAL
 );
 CREATE TABLE IF NOT EXISTS intentos_login (ip TEXT, ts REAL);
+CREATE TABLE IF NOT EXISTS voces (
+  id INTEGER PRIMARY KEY, nombre TEXT NOT NULL, voice_id TEXT NOT NULL UNIQUE,
+  descripcion TEXT, creado REAL
+);
 CREATE TABLE IF NOT EXISTS musica (
   id INTEGER PRIMARY KEY, nombre TEXT NOT NULL, animo TEXT, archivo TEXT NOT NULL,
   duracion REAL, subido_por INTEGER, creado REAL
@@ -593,9 +606,17 @@ def preparar_voz(carpeta, datos):
     import reelia_voz
     texto = voz.get("guion") or reelia_fotos.generar_guion(datos)
     voice_id = voz.get("id")
-    if not voice_id:
-        voces, _ = voces_cuenta()
-        voice_id = voces[0]["id"] if voces else ""
+    if not voice_id:  # sin voz elegida: la primera cargada en VideoLabs, o la primera de la cuenta
+        c = db_suelta()
+        fila = c.execute("SELECT voice_id FROM voces ORDER BY nombre LIMIT 1").fetchone()
+        c.close()
+        if fila:
+            voice_id = fila["voice_id"]
+        else:
+            try:
+                voice_id = reelia_voz.listar_voces()[0]["id"]
+            except Exception:  # noqa: BLE001
+                voice_id = ""
     huella = hashlib.sha256(f"{voice_id}|{reelia_voz.MODELO}|{texto}".encode()).hexdigest()
     ruta, info = os.path.join(carpeta, "voz.mp3"), os.path.join(carpeta, "voz.json")
     try:
@@ -614,6 +635,56 @@ def preparar_voz(carpeta, datos):
         with open(aviso, "w", encoding="utf-8") as fh:
             fh.write(f"No se pudo generar la voz en off: {e} El video se armó sin voz.")
         return None
+
+
+@app.route("/voces", methods=["GET", "POST"])
+@admin_requerido
+def voces():
+    if request.method == "POST":
+        accion = request.form.get("accion")
+        if accion == "agregar":
+            nombre = request.form.get("nombre", "").strip()[:60]
+            voice_id = request.form.get("voice_id", "").strip()[:64]
+            if not nombre or not voice_id.replace("_", "").isalnum():
+                flash("Completá el nombre y un ID de voz válido (solo letras y números).", "error")
+            else:
+                try:
+                    db().execute("INSERT INTO voces (nombre, voice_id, descripcion, creado) "
+                                 "VALUES (?,?,?,?)",
+                                 (nombre, voice_id, request.form.get("descripcion", "").strip()[:80],
+                                  time.time()))
+                    db().commit()
+                    flash(f"Voz “{nombre}” agregada. Tocá ▶ Escuchar para probarla.", "ok")
+                except sqlite3.IntegrityError:
+                    flash("Esa voz ya está cargada.", "error")
+        elif accion == "borrar":
+            db().execute("DELETE FROM voces WHERE id=?", (request.form.get("id", "0"),))
+            db().commit()
+            flash("Voz eliminada.", "ok")
+        return redirect(url_for("voces"))
+    lista = db().execute("SELECT * FROM voces ORDER BY nombre").fetchall()
+    return render_template("voces.html", lista=lista)
+
+
+@app.route("/voces/<int:vid>/muestra.mp3")
+@login_requerido
+def voz_muestra(vid):
+    """Frase corta de prueba con esa voz; se genera una vez (pocos créditos) y queda guardada."""
+    fila = db().execute("SELECT * FROM voces WHERE id=?", (vid,)).fetchone()
+    if not fila:
+        abort(404)
+    carpeta = os.path.join(DATOS, "muestras_voz")
+    os.makedirs(carpeta, exist_ok=True)
+    ruta = os.path.join(carpeta, f"{secure_filename(fila['voice_id'])}.mp3")
+    if not os.path.exists(ruta):
+        sys.path.insert(0, os.path.dirname(MOTOR))
+        import reelia_voz
+        try:
+            reelia_voz.sintetizar("Hola, te muestro este departamento en venta. Escribinos y "
+                                  "coordiná tu visita.", fila["voice_id"], ruta)
+        except Exception as e:  # noqa: BLE001
+            return {"error": str(e)}, 502
+    return send_file(ruta, mimetype="audio/mpeg", conditional=True, max_age=86400)
 
 
 @app.route("/voz/guion", methods=["POST"])

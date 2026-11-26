@@ -84,7 +84,7 @@
       <span><strong>Agregar voz en off con acento argentino</strong>
       Una voz narra la propiedad; el video dura lo que dura la voz y la música baja mientras habla.</span></label>
     <div id="voz-opciones" {{ 'hidden' if not voz.activa }}>
-      {% if voces_error %}<div class="aviso error">{{ voces_error }}</div>{% endif %}
+      {% if voces_error %}<div class="aviso error">{{ voces_error }}{% if usuario.admin and 'Voces' in voces_error %} <a href="{{ url_for('voces') }}">Ir a Voces</a>{% endif %}</div>{% endif %}
       {% if voces %}
       <h3 class="sub-seccion">Voz</h3>
       <div class="opciones musica">
@@ -94,7 +94,7 @@
           {% if v.muestra %}<button type="button" class="escuchar" data-src="{{ v.muestra }}">▶ Escuchar</button>{% endif %}</span></label>
         {% endfor %}
       </div>
-      {% elif not voces_error %}<p class="nota">No hay voces en tu cuenta de ElevenLabs. Agregá alguna desde Voice Library → “Add to my voices”.</p>{% endif %}
+      {% elif not voces_error %}<p class="nota">No hay voces cargadas.{% if usuario.admin %} Agregalas en <a href="{{ url_for('voces') }}">Voces</a>.{% endif %}</p>{% endif %}
       <h3 class="sub-seccion">Guion</h3>
       <textarea name="guion" id="guion" rows="4" maxlength="1500" placeholder="Si lo dejás vacío, VideoLabs lo arma con los datos de la ficha.">{{ voz.guion or '' }}</textarea>
       <div class="guion-pie"><button type="button" class="btn chico secundario-neutro" id="sugerir-guion">Armar guion con los datos de la ficha</button>
