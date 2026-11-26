@@ -55,6 +55,26 @@ sys.path.insert(0, os.path.dirname(MOTOR))  # para importar el curador de fotos
 
 def ia_disponible():
     return bool(os.environ.get("ANTHROPIC_API_KEY"))
+
+
+def voz_disponible():
+    return bool(os.environ.get("ELEVENLABS_API_KEY"))
+
+
+_voces_cache = {"t": 0, "voces": [], "error": None}
+
+
+def voces_cuenta():
+    """Voces de la cuenta de ElevenLabs (se consultan cada 10 minutos como mucho)."""
+    if not voz_disponible():
+        return [], None
+    if time.time() - _voces_cache["t"] > 600 or _voces_cache["error"]:
+        try:
+            import reelia_voz
+            _voces_cache.update(t=time.time(), voces=reelia_voz.listar_voces(), error=None)
+        except Exception as e:  # noqa: BLE001
+            _voces_cache.update(t=time.time(), error=str(e))
+    return _voces_cache["voces"], _voces_cache["error"]
 MAX_FOTOS = 15
 
 app = Flask(__name__)
@@ -145,7 +165,8 @@ def contexto():
     def lista_pistas():
         return db().execute("SELECT * FROM musica ORDER BY creado DESC").fetchall()
     return {"csrf": session.get("csrf", ""), "usuario": usuario_actual(),
-            "estilos_musica": ESTILOS_MUSICA, "lista_pistas": lista_pistas}
+            "estilos_musica": ESTILOS_MUSICA, "lista_pistas": lista_pistas,
+            "voz_disponible": voz_disponible(), "voces_cuenta": voces_cuenta}
 
 
 def usuario_actual():
@@ -399,6 +420,9 @@ def datos_del_formulario(f, carpeta, logo_actual=None):
         "formato": "horizontal" if f.get("formato") == "horizontal" else "vertical",
         "ficha": bool(f.get("ficha")),
         "transicion": f.get("transicion") if f.get("transicion") in TRANSICIONES else "variadas",
+        "voz": {"activa": bool(f.get("voz_activa")) and voz_disponible(),
+                "id": f.get("voz_id", "").strip()[:64],
+                "guion": " ".join(f.get("guion", "").split())[:1500]},
     }
     logo = request.files.get("logo")
     if logo and logo.filename:
@@ -505,6 +529,9 @@ def renderizar(vid, estilo):
         cmd = [sys.executable, MOTOR, "--fotos", os.path.join(carpeta, "fotos"),
                "--segundos-por-foto", "3.4"]
         limite = 900
+        voz = preparar_voz(carpeta, datos)
+        if voz:
+            cmd += ["--voz", voz]
     nuevo = os.path.join(carpeta, "video_nuevo.mp4")
     cmd += ["--formato", datos.get("formato", "vertical"),
             "--transicion", datos.get("transicion", "variadas")]
@@ -525,6 +552,59 @@ def renderizar(vid, estilo):
         c.execute("UPDATE videos SET estado='error', error=? WHERE id=?", (str(e)[-1500:], vid))
     c.commit()
     c.close()
+
+
+def preparar_voz(carpeta, datos):
+    """Genera la voz en off con ElevenLabs (o reutiliza la anterior si no cambió nada).
+    Si falla, el video se arma igual sin voz y queda un aviso."""
+    aviso = os.path.join(carpeta, "aviso_voz.txt")
+    if os.path.exists(aviso):
+        os.remove(aviso)
+    voz = datos.get("voz") or {}
+    if not voz.get("activa"):
+        return None
+    import hashlib
+    sys.path.insert(0, os.path.dirname(MOTOR))
+    import reelia_fotos
+    import reelia_voz
+    texto = voz.get("guion") or reelia_fotos.generar_guion(datos)
+    voice_id = voz.get("id")
+    if not voice_id:
+        voces, _ = voces_cuenta()
+        voice_id = voces[0]["id"] if voces else ""
+    huella = hashlib.sha256(f"{voice_id}|{reelia_voz.MODELO}|{texto}".encode()).hexdigest()
+    ruta, info = os.path.join(carpeta, "voz.mp3"), os.path.join(carpeta, "voz.json")
+    try:
+        if os.path.exists(info) and os.path.exists(ruta):
+            with open(info, encoding="utf-8") as fh:
+                if json.load(fh).get("huella") == huella:
+                    return ruta  # mismo texto y misma voz: no gastamos créditos de nuevo
+        if not voice_id:
+            raise reelia_voz.ErrorVoz("No hay voces en la cuenta de ElevenLabs.")
+        reelia_voz.sintetizar(texto, voice_id, ruta)
+        with open(info, "w", encoding="utf-8") as fh:
+            json.dump({"huella": huella, "texto": texto, "voz": voice_id}, fh, ensure_ascii=False)
+        return ruta
+    except Exception as e:  # noqa: BLE001
+        app.logger.warning("Voz en off falló: %s", e)
+        with open(aviso, "w", encoding="utf-8") as fh:
+            fh.write(f"No se pudo generar la voz en off: {e} El video se armó sin voz.")
+        return None
+
+
+@app.route("/voz/guion", methods=["POST"])
+@login_requerido
+def voz_guion():
+    """Arma el guion sugerido con lo que está cargado en el formulario."""
+    sys.path.insert(0, os.path.dirname(MOTOR))
+    import reelia_fotos
+    f = request.form
+    d = {"operacion": f.get("operacion", "Venta"), "tipo": f.get("tipo", "").strip() or "propiedad",
+         "ubicacion": f.get("ubicacion", "").strip(), "moneda": f.get("moneda", "USD"),
+         "precio": numero(f.get("precio")), "ambientes": numero(f.get("ambientes")),
+         "dormitorios": numero(f.get("dormitorios")), "banos": numero(f.get("banos")),
+         "m2_totales": numero(f.get("m2")), "cochera": bool(f.get("cochera"))}
+    return {"guion": reelia_fotos.generar_guion(d)}
 
 
 def curar_con_ia(carpeta, datos):
@@ -584,10 +664,15 @@ def ver_video(vid):
     if os.path.exists(ruta):
         with open(ruta, encoding="utf-8") as fh:
             informe = json.load(fh)
+    aviso_voz = None
+    ruta_aviso = os.path.join(carpeta_video(v["id"]), "aviso_voz.txt")
+    if os.path.exists(ruta_aviso):
+        with open(ruta_aviso, encoding="utf-8") as fh:
+            aviso_voz = fh.read()
     autor = db().execute("SELECT id, nombre, email FROM usuarios WHERE id=?",
                          (v["usuario_id"],)).fetchone()
     return render_template("video.html", v=v, curacion=leer_curacion(v["id"]), informe=informe,
-                           autor=autor)
+                           autor=autor, aviso_voz=aviso_voz)
 
 
 @app.route("/video/<vid>/archivo")

@@ -76,6 +76,14 @@ sed -i 's/client_max_body_size 200M;/client_max_body_size 1100M;\n    client_bod
 ```
 Para otro tamaño de modelo: `REELIA_WHISPER_MODELO=base` (más rápido) o `medium` (más preciso) en `/etc/reelia.env`.
 
+## 10. Voz en off (ElevenLabs)
+Plan Starter o superior (el gratis no permite uso comercial). Crear la clave en elevenlabs.io → API Keys
+(permisos: Text to Speech y Voices: lectura) y guardarla:
+```bash
+read -s -p "Clave de ElevenLabs: " K && echo && sed -i '/^ELEVENLABS_API_KEY=/d' /etc/reelia.env && echo "ELEVENLABS_API_KEY=$K" >> /etc/reelia.env && unset K && systemctl restart reelia && echo "== VOZ ACTIVADA =="
+```
+Las voces que aparecen en la plataforma son las de "My Voices" de la cuenta.
+
 ## Actualizar a una versión nueva
 ```bash
 cd /opt/reelia/src && sudo -u reelia git pull && /opt/reelia/.venv/bin/pip install -q -r /opt/reelia/reelia/web/requirements.txt && systemctl restart reelia

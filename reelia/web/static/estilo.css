@@ -224,3 +224,9 @@ label.check.ia strong { color: var(--texto); }
 .renombrar input { padding: 6px 10px; font-size: .88rem; }
 @media (max-width: 560px) { .renombrar { grid-template-columns: 1fr 1fr; } }
 .escuchar { white-space: nowrap; }
+
+/* voz en off */
+textarea { font: inherit; width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--borde); background: var(--fondo); color: var(--texto); resize: vertical; }
+textarea:focus { outline: 2px solid var(--marca); outline-offset: 1px; }
+.guion-pie { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+.guion-pie .btn { margin: 0; }

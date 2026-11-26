@@ -75,4 +75,32 @@
     </div>
     {% if usuario.admin %}<p class="nota">Podés sumar temas reales en <a href="{{ url_for('musica') }}">Música</a>.</p>{% endif %}
   </section>
+  {% if voz_disponible and modo != 'videos' %}
+  {% set voz = d.voz or {} %}
+  {% set voces, voces_error = voces_cuenta() %}
+  <section class="tarjeta" id="seccion-voz">
+    <h2><span class="paso">6</span> Voz en off <small class="nota">(opcional)</small></h2>
+    <label class="check ia"><input type="checkbox" name="voz_activa" id="voz-activa" {{ 'checked' if voz.activa }}>
+      <span><strong>Agregar voz en off con acento argentino</strong>
+      Una voz narra la propiedad; el video dura lo que dura la voz y la música baja mientras habla.</span></label>
+    <div id="voz-opciones" {{ 'hidden' if not voz.activa }}>
+      {% if voces_error %}<div class="aviso error">{{ voces_error }}</div>{% endif %}
+      {% if voces %}
+      <h3 class="sub-seccion">Voz</h3>
+      <div class="opciones musica">
+        {% for v in voces %}
+        <label><input type="radio" name="voz_id" value="{{ v.id }}" {{ 'checked' if voz.id == v.id or (not voz.id and loop.first) }}>
+          <span><strong>{{ v.nombre }}</strong>{{ v.descripcion or ' ' }}
+          {% if v.muestra %}<button type="button" class="escuchar" data-src="{{ v.muestra }}">▶ Escuchar</button>{% endif %}</span></label>
+        {% endfor %}
+      </div>
+      {% elif not voces_error %}<p class="nota">No hay voces en tu cuenta de ElevenLabs. Agregá alguna desde Voice Library → “Add to my voices”.</p>{% endif %}
+      <h3 class="sub-seccion">Guion</h3>
+      <textarea name="guion" id="guion" rows="4" maxlength="1500" placeholder="Si lo dejás vacío, VideoLabs lo arma con los datos de la ficha.">{{ voz.guion or '' }}</textarea>
+      <div class="guion-pie"><button type="button" class="btn chico secundario-neutro" id="sugerir-guion">Armar guion con los datos de la ficha</button>
+        <span class="nota" id="contador-guion"></span></div>
+    </div>
+  </section>
+  <script src="{{ url_for('static', filename='voz.js') }}" data-url="{{ url_for('voz_guion') }}"></script>
+  {% endif %}
   <script src="{{ url_for('static', filename='escuchar.js') }}"></script>
