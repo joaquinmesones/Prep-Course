@@ -38,9 +38,20 @@ def _pedido(metodo, ruta, cuerpo=None, timeout=120):
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.read()
     except urllib.error.HTTPError as e:
-        detalle = e.read().decode(errors="replace")[:300]
+        detalle = e.read().decode(errors="replace")[:400]
+        try:  # ElevenLabs suele responder {"detail": {"status": ..., "message": ...}}
+            info = json.loads(detalle).get("detail") or {}
+            estado = info.get("status", "") if isinstance(info, dict) else ""
+            mensaje = info.get("message", "") if isinstance(info, dict) else str(info)
+        except ValueError:
+            estado, mensaje = "", detalle
+        if "permission" in (estado + mensaje).lower():
+            raise ErrorVoz("A la clave de ElevenLabs le falta un permiso. Editala en ElevenLabs → "
+                           "Desarrolladores → Claves de API y habilitá “De texto a voz: Acceso” y "
+                           f"“Voces: Lectura”. (ElevenLabs dice: {mensaje})") from e
         if e.code == 401:
-            raise ErrorVoz("ElevenLabs rechazó la clave (revisá que esté bien copiada).") from e
+            raise ErrorVoz("ElevenLabs rechazó la clave: revisá que esté bien copiada, completa y "
+                           f"sin espacios. (ElevenLabs dice: {mensaje or estado or 'no autorizado'})") from e
         if e.code in (402, 429) or "quota" in detalle.lower():
             raise ErrorVoz("Se terminaron los créditos de ElevenLabs de este mes.") from e
         raise ErrorVoz(f"ElevenLabs respondió {e.code}: {detalle}") from e

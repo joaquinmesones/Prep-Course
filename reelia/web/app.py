@@ -133,11 +133,23 @@ def iniciar_db():
     os.makedirs(DATOS, exist_ok=True)
     c = db_suelta()
     c.executescript(ESQUEMA)
-    # si el servidor se reinició con videos a medio hacer, los marcamos con error
-    c.execute("UPDATE videos SET estado='error', error='El servidor se reinició' "
-              "WHERE estado IN ('en_cola','procesando')")
     c.commit()
     c.close()
+
+
+def retomar_pendientes():
+    """Si el servidor se reinició con videos a medio hacer, se vuelven a encolar solos."""
+    c = db_suelta()
+    filas = c.execute("SELECT id, datos FROM videos WHERE estado IN ('en_cola','procesando') "
+                      "ORDER BY creado").fetchall()
+    for fila in filas:
+        c.execute("UPDATE videos SET estado='en_cola', error=NULL WHERE id=?", (fila["id"],))
+        estilo = (json.loads(fila["datos"] or "{}").get("musica") or "calido")
+        trabajos.submit(renderizar, fila["id"], estilo)
+    c.commit()
+    c.close()
+    if filas:
+        app.logger.warning("Retomando %d video(s) interrumpidos por un reinicio.", len(filas))
 
 
 # ---------------------------------------------------------------- seguridad
@@ -544,6 +556,11 @@ def renderizar(vid, estilo):
     cmd += ["--datos", os.path.join(carpeta, "propiedad.json"), "--salida", nuevo]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=limite)
+        if r.returncode in (-15, -2):  # reinicio o apagado del servidor: se retoma al volver
+            c.execute("UPDATE videos SET estado='en_cola' WHERE id=?", (vid,))
+            c.commit()
+            c.close()
+            return
         if r.returncode != 0:
             detalle = (r.stderr or "")[-1500:] or (r.stdout or "")[-1500:]
             if r.returncode < 0:  # lo cortó el sistema (p. ej. por falta de memoria)
@@ -789,6 +806,20 @@ def editar_video(vid):
     return redirect(url_for("ver_video", vid=vid))
 
 
+@app.route("/video/<vid>/reintentar", methods=["POST"])
+@login_requerido
+def reintentar_video(vid):
+    v = video_del_usuario(vid)
+    if v["estado"] != "error":
+        return redirect(url_for("ver_video", vid=vid))
+    estilo = json.loads(v["datos"] or "{}").get("musica") or "calido"
+    db().execute("UPDATE videos SET estado='en_cola', error=NULL WHERE id=?", (v["id"],))
+    db().commit()
+    trabajos.submit(renderizar, v["id"], estilo)
+    flash("Volvimos a armar el video.", "ok")
+    return redirect(url_for("ver_video", vid=vid))
+
+
 @app.route("/video/<vid>/borrar", methods=["POST"])
 @login_requerido
 def borrar_video(vid):
@@ -949,3 +980,6 @@ def crear_usuario(email, nombre, admin, clave):
 
 
 iniciar_db()
+# solo el servidor web retoma trabajos (no los comandos de consola como crear-usuario)
+if "gunicorn" in os.path.basename(sys.argv[0]) or os.environ.get("REELIA_RETOMAR") == "1":
+    retomar_pendientes()
