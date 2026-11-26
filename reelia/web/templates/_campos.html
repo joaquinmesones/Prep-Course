@@ -52,11 +52,27 @@
 
   <section class="tarjeta">
     <h2><span class="paso">5</span> Música</h2>
-    <div class="opciones">
-      {% set musica = d.musica or 'calido' %}
-      {% for valor, nombre, desc in [('calido', 'Cálida', 'Piano y ritmo suave'), ('moderno', 'Moderna', 'Más movida, para ads'), ('sereno', 'Serena', 'Lenta, premium'), ('ninguno', 'Sin música', 'Video mudo')] %}
-      <label><input type="radio" name="musica" value="{{ valor }}" {{ 'checked' if musica == valor }}><span><strong>{{ nombre }}</strong>{{ desc }}</span></label>
+    {% set musica = d.musica or 'calido' %}
+    {% set pistas = lista_pistas() %}
+    {% if pistas %}
+    <h3 class="sub-seccion">Biblioteca de temas</h3>
+    <div class="opciones musica">
+      {% for p in pistas %}
+      <label><input type="radio" name="musica" value="pista:{{ p.id }}" {{ 'checked' if musica == 'pista:' ~ p.id }}>
+        <span><strong>{{ p.nombre }}</strong>{{ p.animo or 'Tema subido' }} · {{ '%d:%02d'|format(p.duracion // 60, p.duracion % 60) }}
+        <button type="button" class="escuchar" data-src="{{ url_for('musica_pista', pid=p.id) }}" aria-label="Escuchar">▶ Escuchar</button></span></label>
       {% endfor %}
     </div>
-    <p class="nota">VideoLabs compone una pista original para cada video: libre de derechos.</p>
+    {% endif %}
+    <h3 class="sub-seccion">Compuesta por VideoLabs <small>(libre de derechos)</small></h3>
+    <div class="opciones musica">
+      {% for valor, (nombre, desc) in estilos_musica.items() %}
+      <label><input type="radio" name="musica" value="{{ valor }}" {{ 'checked' if musica == valor }}>
+        <span><strong>{{ nombre }}</strong>{{ desc }}
+        <button type="button" class="escuchar" data-src="{{ url_for('musica_muestra', estilo=valor) }}" aria-label="Escuchar">▶ Escuchar</button></span></label>
+      {% endfor %}
+      <label><input type="radio" name="musica" value="ninguno" {{ 'checked' if musica == 'ninguno' }}><span><strong>Sin música</strong>Video sin fondo musical</span></label>
+    </div>
+    {% if usuario.admin %}<p class="nota">Podés sumar temas reales en <a href="{{ url_for('musica') }}">Música</a>.</p>{% endif %}
   </section>
+  <script src="{{ url_for('static', filename='escuchar.js') }}"></script>

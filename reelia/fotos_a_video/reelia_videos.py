@@ -321,6 +321,7 @@ def mezclar(video, musica, con_voz, salida):
 
 # ---------------------------------------------------------------------- main
 def armar(clips, d, salida, objetivo=30.0, subtitulos=True, estilo_musica="calido",
+          musica_archivo=None,
           ambiente=False, transcriptor=None, informe=None, formato="vertical",
           transicion="variadas"):
     global W, H
@@ -414,8 +415,8 @@ def armar(clips, d, salida, objetivo=30.0, subtitulos=True, estilo_musica="calid
         capas_finales(unido, d, marca, subs_ass, tmp, con_capas)
 
         # 7) música
-        musica = None
-        if estilo_musica != "ninguno":
+        musica = musica_archivo if musica_archivo and os.path.exists(musica_archivo) else None
+        if not musica and estilo_musica != "ninguno":
             musica = os.path.join(tmp, "musica.mp3")
             rf.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                                  "reelia_musica.py"),
@@ -452,14 +453,16 @@ def main():
     ap.add_argument("--sin-subtitulos", action="store_true")
     ap.add_argument("--con-ambiente", action="store_true")
     ap.add_argument("--estilo-musica", default="calido",
-                    choices=["calido", "moderno", "sereno", "ninguno"])
+                    choices=["calido", "moderno", "sereno", "alegre", "elegante", "inspirador",
+                             "chill", "tropical", "ninguno"])
     ap.add_argument("--informe", help="guardar un resumen .json de la edición")
+    ap.add_argument("--musica", help="tema propio (mp3/m4a/wav) en lugar de la música generada")
     ap.add_argument("--formato", choices=list(rf.FORMATOS), default="vertical")
     ap.add_argument("--transicion", choices=list(rf.TRANSICIONES), default="variadas")
     a = ap.parse_args()
     with open(a.datos, encoding="utf-8") as fh:
         d = json.load(fh)
-    armar(a.clips, d, a.salida, a.objetivo, not a.sin_subtitulos, a.estilo_musica,
+    armar(a.clips, d, a.salida, a.objetivo, not a.sin_subtitulos, a.estilo_musica, a.musica,
           a.con_ambiente, informe=a.informe, formato=a.formato, transicion=a.transicion)
 
 

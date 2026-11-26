@@ -9,6 +9,11 @@ Estilos:
   calido   — piano eléctrico + bajo + batería suave, ~96 BPM (propiedades, hogar)
   moderno  — pulso tipo house suave, ~118 BPM (ads, lanzamientos)
   sereno   — pads y piano lento, ~72 BPM (premium, lujo)
+  alegre   — arpegio de cuerdas pulsadas + palmas, ~124 BPM (lanzamientos, familia)
+  elegante — piano acústico y batería mínima, ~84 BPM (propiedades de categoría)
+  inspirador — piano en arpegio que va creciendo, ~100 BPM (emprendimientos, historias)
+  chill    — lo-fi con piano eléctrico y swing, ~78 BPM (departamentos, jóvenes)
+  tropical — marimba a contratiempo + palmas, ~104 BPM (verano, quintas, pileta)
 
 Uso:
   python3 reelia_musica.py --estilo calido --segundos 20 --salida musica.mp3 [--semilla 7]
@@ -25,17 +30,34 @@ from scipy.signal import butter, sosfilt, fftconvolve
 SR = 44100
 
 ESTILOS = {
+    # tema: armonía en bloques ("bloques"), arpegio ("arpegio") o golpes a contratiempo ("contra")
     "calido": dict(bpm=96, progresion=[("C", "maj9"), ("A", "m9"), ("F", "maj9"), ("G", "6sus")],
                    bombo=[0, 2.5], caja=[1, 3], hats=8, brillo=0.35, swing=0.06),
     "moderno": dict(bpm=118, progresion=[("A", "m9"), ("F", "maj9"), ("C", "maj9"), ("G", "6sus")],
                     bombo=[0, 1, 2, 3], caja=[1, 3], hats=8, brillo=0.5, swing=0.0),
     "sereno": dict(bpm=72, progresion=[("D", "maj9"), ("B", "m9"), ("G", "maj9"), ("A", "6sus")],
                    bombo=[0], caja=[], hats=0, brillo=0.25, swing=0.0),
+    "alegre": dict(bpm=124, progresion=[("G", "maj"), ("D", "maj"), ("E", "m7"), ("C", "maj9")],
+                   bombo=[0, 1, 2, 3], caja=[1, 3], hats=8, brillo=0.6, swing=0.0,
+                   timbre="pluck", patron="arpegio", palmas=True),
+    "elegante": dict(bpm=84, progresion=[("F", "maj9"), ("D", "m9"), ("A#", "maj9"), ("C", "6sus")],
+                     bombo=[0, 2.5], caja=[3], hats=4, brillo=0.3, swing=0.0,
+                     timbre="piano", patron="bloques"),
+    "inspirador": dict(bpm=100, progresion=[("C", "maj9"), ("G", "6sus"), ("A", "m9"), ("F", "maj9")],
+                       bombo=[0, 1, 2, 3], caja=[2], hats=8, brillo=0.45, swing=0.0,
+                       timbre="piano", patron="arpegio", crece=True),
+    "chill": dict(bpm=78, progresion=[("D", "m9"), ("G", "6sus"), ("C", "maj9"), ("A", "m7")],
+                  bombo=[0, 2.25], caja=[1, 3], hats=8, brillo=0.18, swing=0.12,
+                  timbre="rhodes", patron="bloques", lofi=True),
+    "tropical": dict(bpm=104, progresion=[("A", "m7"), ("F", "maj9"), ("C", "maj"), ("G", "maj")],
+                     bombo=[0, 1, 2, 3], caja=[], hats=8, brillo=0.55, swing=0.0,
+                     timbre="marimba", patron="contra", palmas=True),
 }
 
 NOTAS = {"C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5, "F#": 6, "G": 7, "G#": 8,
          "A": 9, "A#": 10, "B": 11}
-ACORDES = {"maj9": [0, 4, 7, 11, 14], "m9": [0, 3, 7, 10, 14], "6sus": [0, 5, 7, 9, 14]}
+ACORDES = {"maj9": [0, 4, 7, 11, 14], "m9": [0, 3, 7, 10, 14], "6sus": [0, 5, 7, 9, 14],
+           "maj": [0, 4, 7, 12], "m7": [0, 3, 7, 10]}
 
 
 def hz(midi):
@@ -68,6 +90,48 @@ def piano_electrico(f, dur, vel=0.5):
     tono += 0.18 * np.sin(2 * np.pi * f * 2 * t) * np.exp(-t * 4)
     trem = 1 + 0.08 * np.sin(2 * np.pi * 4.5 * t)
     return vel * tono * trem * env(n, 0.004, 1.1, 0.25, 0.15)
+
+
+def piano(f, dur, vel=0.5):
+    """Piano acústico aproximado: varios armónicos que decaen a distinto ritmo."""
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    x = np.zeros(n)
+    for k, (amp, caida) in enumerate([(1.0, 2.2), (0.45, 3.5), (0.25, 5.0), (0.12, 7.0), (0.06, 9.0)]):
+        x += amp * np.sin(2 * np.pi * f * (k + 1) * (1 + 0.0004 * k * k) * t) * np.exp(-t * caida)
+    ataque = np.minimum(1, t / 0.004)
+    return vel * 0.6 * x * ataque * env(n, 0.002, 2.0, 0.0, 0.12)
+
+
+def marimba(f, dur, vel=0.5):
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    x = np.sin(2 * np.pi * f * t) + 0.35 * np.sin(2 * np.pi * f * 4 * t) * np.exp(-t * 30)
+    return vel * x * np.exp(-t * 7) * np.minimum(1, t / 0.002)
+
+
+def pluck(f, dur, vel=0.5, rng=None):
+    """Cuerda pulsada (Karplus-Strong): suena a guitarra/arpa sintetizada."""
+    rng = rng or np.random.default_rng(int(f))
+    n = int(dur * SR)
+    periodo = max(2, int(SR / f))
+    buf = rng.uniform(-1, 1, periodo)
+    out = np.empty(n)
+    for i in range(n):
+        out[i] = buf[i % periodo]
+        buf[i % periodo] = 0.996 * 0.5 * (buf[i % periodo] + buf[(i + 1) % periodo])
+    return vel * lowpass(out, 5000) * env(n, 0.001, 1.2, 0.0, 0.05)
+
+
+def palma(rng, vel=0.16):
+    n = int(0.18 * SR)
+    t = np.arange(n) / SR
+    ruido = highpass(rng.standard_normal(n), 900)
+    env_p = np.exp(-t * 35) + 0.6 * np.exp(-np.abs(t - 0.012) * 300) + 0.4 * np.exp(-np.abs(t - 0.024) * 300)
+    return vel * lowpass(ruido, 6000) * env_p
+
+
+INSTRUMENTOS = {"rhodes": piano_electrico, "piano": piano, "marimba": marimba, "pluck": pluck}
 
 
 def pad(f, dur, vel=0.25):
@@ -147,14 +211,31 @@ def componer(estilo="calido", segundos=20.0, semilla=7):
         t0 = c * compas
         notas = [base + 12 + iv for iv in ACORDES[tipo]]
         # acordes: piano en los tiempos 1 y 2.5 (y pad en el estilo sereno)
+        inst = INSTRUMENTOS[cfg.get("timbre", "rhodes")]
+        patron = cfg.get("patron", "bloques")
+        # "crece": empieza suave y va subiendo de intensidad
+        fuerza = min(1.0, 0.55 + 0.12 * c) if cfg.get("crece") else 1.0
         for k, m in enumerate(notas):
             if estilo == "sereno":
                 poner(armonia, pad(hz(m), compas + 0.4), t0)
                 poner(armonia, piano_electrico(hz(m), 2.5, 0.22), t0 + k * 0.06)
+            elif patron == "arpegio":
+                poner(armonia, pad(hz(m), compas, 0.05 * fuerza), t0)
+            elif patron == "contra":
+                for b in (0.5, 1.5, 2.5, 3.5):
+                    poner(armonia, inst(hz(m), beat * 0.6, 0.2), t0 + b * beat + k * 0.006)
             else:
-                poner(armonia, piano_electrico(hz(m), beat * 2.2, 0.28), t0 + k * 0.012)
-                poner(armonia, piano_electrico(hz(m), beat * 1.5, 0.18), t0 + 2.5 * beat + k * 0.012)
+                poner(armonia, inst(hz(m), beat * 2.2, 0.28 * fuerza), t0 + k * 0.012)
+                poner(armonia, inst(hz(m), beat * 1.5, 0.18 * fuerza), t0 + 2.5 * beat + k * 0.012)
                 poner(armonia, pad(hz(m), compas, 0.06), t0)
+        if patron == "arpegio":  # corcheas subiendo y bajando por el acorde
+            orden = notas + notas[-2:0:-1]
+            for paso in range(8):
+                nota = orden[paso % len(orden)]
+                poner(armonia, inst(hz(nota), beat * 0.9, 0.2 * fuerza), t0 + paso * beat / 2)
+        if cfg.get("palmas") and c >= 1:
+            for b in (1, 3):
+                poner(ritmo, palma(rng), t0 + b * beat)
         # bajo
         patron_bajo = [0, 2.5, 3] if estilo != "sereno" else [0, 2]
         for b in patron_bajo:
@@ -176,7 +257,8 @@ def componer(estilo="calido", segundos=20.0, semilla=7):
                 if pos >= 4:
                     break
                 nota = base + 24 + rng.choice(escala[:6])
-                poner(melodia, piano_electrico(hz(nota), beat * p * 1.6, 0.16), t0 + pos * beat)
+                poner(melodia, INSTRUMENTOS[cfg.get("timbre", "rhodes")](
+                    hz(nota), beat * p * 1.6, 0.16), t0 + pos * beat)
                 pos += p
 
     # "sidechain" suave: la armonía respira con el bombo
@@ -194,6 +276,10 @@ def componer(estilo="calido", segundos=20.0, semilla=7):
     armonia = lowpass(armonia, 2500 + 6000 * cfg["brillo"])
     mezcla = 0.9 * reverb(armonia + melodia, rng, mezcla=0.28) + 0.85 * lowpass(graves, 400) \
         + 0.5 * lowpass(reverb(ritmo, rng, 0.8, 0.08), 9000)
+    if cfg.get("lofi"):  # sonido de vinilo: menos agudos y un poco de crujido
+        mezcla = lowpass(mezcla, 3600)
+        crujido = (rng.random(len(mezcla)) > 0.9993) * rng.uniform(-0.25, 0.25, len(mezcla))
+        mezcla = mezcla + lowpass(crujido, 4000) + 0.004 * lowpass(rng.standard_normal(len(mezcla)), 2500)
     mezcla = highpass(mezcla, 30)
     # fade in / fade out y recorte a la duración pedida
     mezcla = mezcla[: int(segundos * SR)]

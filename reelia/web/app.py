@@ -37,6 +37,17 @@ MOTOR = os.environ.get("REELIA_MOTOR",
 EXT_FOTOS = {".jpg", ".jpeg", ".png", ".webp"}
 EXT_CLIPS = {".mp4", ".mov", ".m4v", ".webm", ".avi", ".mkv", ".3gp"}
 MAX_CLIPS = 10
+ESTILOS_MUSICA = {  # música compuesta por VideoLabs (libre de derechos)
+    "calido": ("Cálida", "Piano eléctrico y ritmo suave"),
+    "elegante": ("Elegante", "Piano acústico, para propiedades de categoría"),
+    "sereno": ("Serena", "Lenta y ambiental, premium"),
+    "chill": ("Chill", "Lo-fi relajado"),
+    "inspirador": ("Inspiradora", "Piano que va creciendo"),
+    "alegre": ("Alegre", "Cuerdas y palmas, con energía"),
+    "tropical": ("Tropical", "Marimba veraniega, quintas y piletas"),
+    "moderno": ("Moderna", "Pulso tipo house, para anuncios"),
+}
+EXT_MUSICA = {".mp3", ".m4a", ".aac", ".wav", ".ogg"}
 TRANSICIONES = ("variadas", "fundido", "deslizar", "zoom", "circulo", "barrido", "negro", "ninguna")
 MOTOR_VIDEOS = os.path.join(os.path.dirname(MOTOR), "reelia_videos.py")
 sys.path.insert(0, os.path.dirname(MOTOR))  # para importar el curador de fotos
@@ -91,6 +102,10 @@ CREATE TABLE IF NOT EXISTS videos (
   estado TEXT, error TEXT, datos TEXT, creado REAL, terminado REAL
 );
 CREATE TABLE IF NOT EXISTS intentos_login (ip TEXT, ts REAL);
+CREATE TABLE IF NOT EXISTS musica (
+  id INTEGER PRIMARY KEY, nombre TEXT NOT NULL, animo TEXT, archivo TEXT NOT NULL,
+  duracion REAL, subido_por INTEGER, creado REAL
+);
 """
 
 
@@ -127,7 +142,10 @@ def filtro_fecha(ts):
 
 @app.context_processor
 def contexto():
-    return {"csrf": session.get("csrf", ""), "usuario": usuario_actual()}
+    def lista_pistas():
+        return db().execute("SELECT * FROM musica ORDER BY creado DESC").fetchall()
+    return {"csrf": session.get("csrf", ""), "usuario": usuario_actual(),
+            "estilos_musica": ESTILOS_MUSICA, "lista_pistas": lista_pistas}
 
 
 def usuario_actual():
@@ -412,8 +430,23 @@ def encolar(vid, carpeta, datos, f):
 
 
 def estilo_musica(f):
+    """'calido', 'ninguno', ... o 'pista:<id>' para un tema subido a la biblioteca."""
     estilo = f.get("musica", "calido")
-    return estilo if estilo in ("calido", "moderno", "sereno", "ninguno") else "calido"
+    if estilo.startswith("pista:") and estilo[6:].isdigit():
+        if db().execute("SELECT 1 FROM musica WHERE id=?", (int(estilo[6:]),)).fetchone():
+            return estilo
+        return "calido"
+    return estilo if estilo in ESTILOS_MUSICA or estilo == "ninguno" else "calido"
+
+
+def archivo_pista(estilo):
+    if not (estilo or "").startswith("pista:"):
+        return None
+    c = db_suelta()
+    fila = c.execute("SELECT archivo FROM musica WHERE id=?", (estilo[6:],)).fetchone()
+    c.close()
+    ruta = os.path.join(DATOS, "musica", fila["archivo"]) if fila else None
+    return ruta if ruta and os.path.exists(ruta) else None
 
 
 def nuevo_desde_videos(f):
@@ -475,8 +508,13 @@ def renderizar(vid, estilo):
     nuevo = os.path.join(carpeta, "video_nuevo.mp4")
     cmd += ["--formato", datos.get("formato", "vertical"),
             "--transicion", datos.get("transicion", "variadas")]
-    cmd += ["--datos", os.path.join(carpeta, "propiedad.json"),
-            "--salida", nuevo, "--estilo-musica", estilo]
+    pista = archivo_pista(estilo)
+    if pista:
+        cmd += ["--musica", pista, "--estilo-musica", "ninguno"]
+    else:
+        cmd += ["--estilo-musica", estilo if estilo in ESTILOS_MUSICA or estilo == "ninguno"
+                else "calido"]
+    cmd += ["--datos", os.path.join(carpeta, "propiedad.json"), "--salida", nuevo]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=limite)
         if r.returncode != 0:
@@ -677,6 +715,90 @@ def borrar_video(vid):
 def muy_grande(_):
     flash("Los archivos pesan demasiado (máximo 1 GB en total).", "error")
     return redirect(url_for("nuevo"))
+
+
+# ------------------------------------------------------------------ música
+def duracion_audio(ruta):
+    r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries",
+                        "format=duration", "-of", "default=nw=1:nk=1", ruta],
+                       capture_output=True, text=True)
+    try:
+        return float(r.stdout.strip())
+    except ValueError:
+        return None
+
+
+@app.route("/musica", methods=["GET", "POST"])
+@login_requerido
+def musica():
+    if request.method == "POST":
+        if not usuario_actual()["admin"]:
+            abort(403)
+        accion = request.form.get("accion")
+        if accion == "subir":
+            archivo = request.files.get("archivo")
+            nombre = request.form.get("nombre", "").strip()[:80]
+            ext = os.path.splitext(secure_filename(archivo.filename if archivo else ""))[1].lower()
+            if not archivo or ext not in EXT_MUSICA:
+                flash("Subí un archivo MP3, M4A, WAV u OGG.", "error")
+                return redirect(url_for("musica"))
+            carpeta = os.path.join(DATOS, "musica")
+            os.makedirs(carpeta, exist_ok=True)
+            destino = uuid.uuid4().hex[:12] + ext
+            ruta = os.path.join(carpeta, destino)
+            archivo.save(ruta)
+            dur = duracion_audio(ruta)
+            if not dur:
+                os.remove(ruta)
+                flash("No se pudo leer el audio de ese archivo.", "error")
+                return redirect(url_for("musica"))
+            nombre = nombre or os.path.splitext(archivo.filename)[0][:80]
+            db().execute("INSERT INTO musica (nombre, animo, archivo, duracion, subido_por, creado) "
+                         "VALUES (?,?,?,?,?,?)",
+                         (nombre, request.form.get("animo", "").strip()[:40], destino, dur,
+                          usuario_actual()["id"], time.time()))
+            db().commit()
+            flash(f"Tema “{nombre}” agregado a la biblioteca.", "ok")
+        elif accion == "borrar":
+            fila = db().execute("SELECT * FROM musica WHERE id=?",
+                                (request.form.get("id", "0"),)).fetchone()
+            if fila:
+                try:
+                    os.remove(os.path.join(DATOS, "musica", fila["archivo"]))
+                except OSError:
+                    pass
+                db().execute("DELETE FROM musica WHERE id=?", (fila["id"],))
+                db().commit()
+                flash(f"Tema “{fila['nombre']}” eliminado.", "ok")
+        return redirect(url_for("musica"))
+    return render_template("musica.html")
+
+
+@app.route("/musica/pista/<int:pid>")
+@login_requerido
+def musica_pista(pid):
+    fila = db().execute("SELECT archivo FROM musica WHERE id=?", (pid,)).fetchone()
+    if not fila:
+        abort(404)
+    return send_file(os.path.join(DATOS, "musica", fila["archivo"]), conditional=True)
+
+
+@app.route("/musica/muestra/<estilo>.mp3")
+@login_requerido
+def musica_muestra(estilo):
+    """Muestra de 20 s de cada estilo compuesto; se genera una vez y queda guardada."""
+    if estilo not in ESTILOS_MUSICA:
+        abort(404)
+    carpeta = os.path.join(DATOS, "muestras")
+    os.makedirs(carpeta, exist_ok=True)
+    ruta = os.path.join(carpeta, f"{estilo}.mp3")
+    if not os.path.exists(ruta):
+        r = subprocess.run([sys.executable, os.path.join(os.path.dirname(MOTOR), "reelia_musica.py"),
+                            "--estilo", estilo, "--segundos", "20", "--salida", ruta],
+                           capture_output=True, text=True, timeout=180)
+        if r.returncode != 0:
+            abort(500)
+    return send_file(ruta, mimetype="audio/mpeg", conditional=True, max_age=86400)
 
 
 # ------------------------------------------------------------------ consola

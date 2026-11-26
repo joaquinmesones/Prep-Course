@@ -548,7 +548,8 @@ def main():
     ap.add_argument("--salida", default="reelia_propiedad.mp4")
     ap.add_argument("--voz", help="mp3/wav con la voz en off")
     ap.add_argument("--musica", help="mp3/wav con la música de fondo")
-    ap.add_argument("--estilo-musica", choices=["calido", "moderno", "sereno", "ninguno"],
+    ap.add_argument("--estilo-musica", choices=["calido", "moderno", "sereno", "alegre", "elegante", "inspirador",
+                             "chill", "tropical", "ninguno"],
                     default="calido",
                     help="si no pasás --musica, Reelia compone una pista original en este estilo")
     ap.add_argument("--segundos-por-foto", type=float, default=3.2)

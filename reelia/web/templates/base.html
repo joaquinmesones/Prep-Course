@@ -18,7 +18,7 @@
     <nav>
       <a href="{{ url_for('panel') }}">{{ 'Videos' if usuario.admin else 'Mis videos' }}</a>
       <a class="btn chico" href="{{ url_for('nuevo') }}">+ Nuevo video</a>
-      {% if usuario.admin %}<a href="{{ url_for('usuarios') }}">Usuarios</a>{% endif %}
+      {% if usuario.admin %}<a href="{{ url_for('musica') }}">Música</a><a href="{{ url_for('usuarios') }}">Usuarios</a>{% endif %}
       <a href="{{ url_for('cuenta') }}">Mi cuenta</a>
       <form method="post" action="{{ url_for('salir') }}" class="enlinea">
         <input type="hidden" name="csrf" value="{{ csrf }}">

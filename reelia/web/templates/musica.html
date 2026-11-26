@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block titulo %}Música{% endblock %}
+{% block contenido %}
+<h1>Biblioteca de música</h1>
+<div class="dos-col">
+  {% if usuario.admin %}
+  <div class="tarjeta">
+    <h2>Subir un tema</h2>
+    <form method="post" enctype="multipart/form-data">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="accion" value="subir">
+      <label>Archivo<input type="file" name="archivo" accept="audio/*,.mp3,.m4a,.wav,.ogg" required></label>
+      <label>Nombre<input name="nombre" placeholder="Ej: Verano acústico"></label>
+      <label>Estilo / ánimo<input name="animo" placeholder="Ej: Alegre, Elegante, Relajado"></label>
+      <button class="btn">Subir tema</button>
+    </form>
+    <p class="nota">Subí solo música que tengas derecho a usar en videos comerciales. Por ejemplo, <strong>Pixabay Music</strong> (pixabay.com/music) permite uso comercial sin dar crédito. La música de artistas conocidos o de Spotify puede hacer que Instagram o Meta silencien o rechacen el anuncio.</p>
+  </div>
+  {% endif %}
+  <div class="tarjeta">
+    <h2>Temas subidos</h2>
+    {% set pistas = lista_pistas() %}
+    {% if not pistas %}<p class="nota">Todavía no hay temas. Mientras tanto, los videos usan la música compuesta por VideoLabs.</p>{% endif %}
+    <table>
+      {% for p in pistas %}
+      <tr>
+        <td><strong>{{ p.nombre }}</strong><br><span class="nota">{{ p.animo or 'Sin estilo' }} · {{ '%d:%02d'|format(p.duracion // 60, p.duracion % 60) }}</span></td>
+        <td><button type="button" class="escuchar btn chico" data-src="{{ url_for('musica_pista', pid=p.id) }}">▶ Escuchar</button></td>
+        <td>{% if usuario.admin %}
+          <form method="post" class="enlinea" onsubmit="return confirm('¿Eliminar este tema? Los videos que ya lo usan no cambian.')">
+            <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="accion" value="borrar"><input type="hidden" name="id" value="{{ p.id }}">
+            <button class="link">Eliminar</button></form>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    <h2 class="sub-seccion">Compuesta por VideoLabs</h2>
+    <table>
+      {% for valor, (nombre, desc) in estilos_musica.items() %}
+      <tr><td><strong>{{ nombre }}</strong><br><span class="nota">{{ desc }}</span></td>
+        <td><button type="button" class="escuchar btn chico" data-src="{{ url_for('musica_muestra', estilo=valor) }}">▶ Escuchar</button></td><td></td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+<script src="{{ url_for('static', filename='escuchar.js') }}"></script>
+{% endblock %}
