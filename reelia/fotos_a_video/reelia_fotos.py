@@ -68,6 +68,8 @@ def efecto_transicion(estilo, i):
         return None
     if estilo == "variadas" or estilo not in TRANSICIONES:
         return ROTACION[(i - 1) % len(ROTACION)]
+    if estilo == "deslizar":  # en vertical sube, como al pasar historias; en horizontal, de costado
+        return "smoothleft" if es_horizontal() else "smoothup"
     return TRANSICIONES[estilo]
 
 FUENTE_BOLD = "/usr/share/fonts/opentype/inter/Inter-Bold.otf"

@@ -44,7 +44,7 @@
     <h3 class="sub-seccion">Transiciones</h3>
     <div class="opciones transiciones">
       {% set trans = d.transicion or 'variadas' %}
-      {% for valor, nombre, desc in [('variadas', 'Variadas', 'Cambian en cada foto (recomendado)'), ('fundido', 'Fundido', 'Suave y elegante'), ('deslizar', 'Deslizar', 'Como pasar historias'), ('zoom', 'Zoom', 'Acerca hacia la siguiente'), ('circulo', 'Círculo', 'Se abre desde el centro'), ('barrido', 'Barrido', 'Cortina de lado a lado'), ('negro', 'Pasando por negro', 'Clásico de cine'), ('ninguna', 'Sin transición', 'Corte directo')] %}
+      {% for valor, nombre, desc in [('variadas', 'Variadas', 'Cambian en cada foto (recomendado)'), ('fundido', 'Fundido', 'Suave y elegante'), ('deslizar', 'Deslizar', 'Hacia arriba en vertical, de costado en horizontal'), ('zoom', 'Zoom', 'Acerca hacia la siguiente'), ('circulo', 'Círculo', 'Se abre desde el centro'), ('barrido', 'Barrido', 'Cortina de lado a lado'), ('negro', 'Pasando por negro', 'Clásico de cine'), ('ninguna', 'Sin transición', 'Corte directo')] %}
       <label><input type="radio" name="transicion" value="{{ valor }}" {{ 'checked' if trans == valor }}><span><strong>{{ nombre }}</strong>{{ desc }}</span></label>
       {% endfor %}
     </div>
