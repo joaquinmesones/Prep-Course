@@ -5,14 +5,14 @@
 <div class="dos-col">
   {% if usuario.admin %}
   <div class="tarjeta">
-    <h2>Subir un tema</h2>
+    <h2>Subir temas</h2>
     <form method="post" enctype="multipart/form-data">
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <input type="hidden" name="accion" value="subir">
-      <label>Archivo<input type="file" name="archivo" accept="audio/*,.mp3,.m4a,.wav,.ogg" required></label>
-      <label>Nombre<input name="nombre" placeholder="Ej: Verano acústico"></label>
-      <label>Estilo / ánimo<input name="animo" placeholder="Ej: Alegre, Elegante, Relajado"></label>
-      <button class="btn">Subir tema</button>
+      <label>Archivos (podés elegir varios a la vez)<input type="file" name="archivo" accept="audio/*,.mp3,.m4a,.wav,.ogg" multiple required></label>
+      <label>Nombre <small class="nota">(solo si subís uno; con varios se usa el nombre del archivo)</small><input name="nombre" placeholder="Ej: Verano acústico"></label>
+      <label>Estilo / ánimo<input name="animo" placeholder="Ej: Corporativo, Alegre, Elegante"></label>
+      <button class="btn">Subir</button>
     </form>
     <p class="nota">Subí solo música que tengas derecho a usar en videos comerciales. Por ejemplo, <strong>Pixabay Music</strong> (pixabay.com/music) permite uso comercial sin dar crédito. La música de artistas conocidos o de Spotify puede hacer que Instagram o Meta silencien o rechacen el anuncio.</p>
   </div>
@@ -24,7 +24,15 @@
     <table>
       {% for p in pistas %}
       <tr>
-        <td><strong>{{ p.nombre }}</strong><br><span class="nota">{{ p.animo or 'Sin estilo' }} · {{ '%d:%02d'|format(p.duracion // 60, p.duracion % 60) }}</span></td>
+        <td>{% if usuario.admin %}
+          <form method="post" class="renombrar">
+            <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="accion" value="renombrar"><input type="hidden" name="id" value="{{ p.id }}">
+            <input name="nombre" value="{{ p.nombre }}" aria-label="Nombre" required>
+            <input name="animo" value="{{ p.animo or '' }}" placeholder="Estilo" aria-label="Estilo">
+            <span class="nota">{{ '%d:%02d'|format(p.duracion // 60, p.duracion % 60) }}</span>
+            <button class="link">Guardar</button>
+          </form>
+          {% else %}<strong>{{ p.nombre }}</strong><br><span class="nota">{{ p.animo or 'Sin estilo' }} · {{ '%d:%02d'|format(p.duracion // 60, p.duracion % 60) }}</span>{% endif %}</td>
         <td><button type="button" class="escuchar btn chico" data-src="{{ url_for('musica_pista', pid=p.id) }}">▶ Escuchar</button></td>
         <td>{% if usuario.admin %}
           <form method="post" class="enlinea" onsubmit="return confirm('¿Eliminar este tema? Los videos que ya lo usan no cambian.')">

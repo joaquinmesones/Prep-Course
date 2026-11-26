@@ -728,6 +728,21 @@ def duracion_audio(ruta):
         return None
 
 
+def nombre_desde_archivo(nombre_archivo):
+    """'kornevmusic-upbeat-happy-corporate-487426.mp3' -> 'Upbeat Happy Corporate (kornevmusic)'."""
+    import re
+    base = os.path.splitext(os.path.basename(nombre_archivo))[0]
+    base = re.sub(r"^[0-9a-f]{8}-", "", base)          # prefijo que agregan algunos sistemas
+    base = re.sub(r"[-_ ]?\d{4,}$", "", base)          # número de Pixabay al final
+    partes = [p for p in re.split(r"[-_ ]+", base) if p]
+    if len(partes) >= 2:
+        autor, titulo = partes[0], partes[1:]
+        # "corporate-corporate-music" -> sin palabras repetidas seguidas
+        limpio = [w for i, w in enumerate(titulo) if i == 0 or w.lower() != titulo[i - 1].lower()]
+        return (" ".join(w.capitalize() for w in limpio) + f" ({autor})")[:80]
+    return (base.replace("-", " ").strip().capitalize() or "Tema")[:80]
+
+
 @app.route("/musica", methods=["GET", "POST"])
 @login_requerido
 def musica():
@@ -736,29 +751,52 @@ def musica():
             abort(403)
         accion = request.form.get("accion")
         if accion == "subir":
-            archivo = request.files.get("archivo")
-            nombre = request.form.get("nombre", "").strip()[:80]
-            ext = os.path.splitext(secure_filename(archivo.filename if archivo else ""))[1].lower()
-            if not archivo or ext not in EXT_MUSICA:
-                flash("Subí un archivo MP3, M4A, WAV u OGG.", "error")
+            archivos = [a for a in request.files.getlist("archivo") if a and a.filename]
+            if not archivos:
+                flash("Elegí al menos un archivo de audio.", "error")
                 return redirect(url_for("musica"))
             carpeta = os.path.join(DATOS, "musica")
             os.makedirs(carpeta, exist_ok=True)
-            destino = uuid.uuid4().hex[:12] + ext
-            ruta = os.path.join(carpeta, destino)
-            archivo.save(ruta)
-            dur = duracion_audio(ruta)
-            if not dur:
-                os.remove(ruta)
-                flash("No se pudo leer el audio de ese archivo.", "error")
-                return redirect(url_for("musica"))
-            nombre = nombre or os.path.splitext(archivo.filename)[0][:80]
-            db().execute("INSERT INTO musica (nombre, animo, archivo, duracion, subido_por, creado) "
-                         "VALUES (?,?,?,?,?,?)",
-                         (nombre, request.form.get("animo", "").strip()[:40], destino, dur,
-                          usuario_actual()["id"], time.time()))
+            nombre_form = request.form.get("nombre", "").strip()[:80]
+            animo = request.form.get("animo", "").strip()[:40]
+            subidos, rechazados = [], []
+            for archivo in archivos:
+                ext = os.path.splitext(secure_filename(archivo.filename))[1].lower()
+                if ext not in EXT_MUSICA:
+                    rechazados.append(archivo.filename)
+                    continue
+                destino = uuid.uuid4().hex[:12] + ext
+                ruta = os.path.join(carpeta, destino)
+                archivo.save(ruta)
+                dur = duracion_audio(ruta)
+                if not dur:
+                    os.remove(ruta)
+                    rechazados.append(archivo.filename)
+                    continue
+                # con un solo archivo se respeta el nombre escrito; si no, se arma del archivo
+                nombre = (nombre_form if len(archivos) == 1 and nombre_form
+                          else nombre_desde_archivo(archivo.filename))
+                base, n = nombre, 2  # sin nombres repetidos en la biblioteca
+                while db().execute("SELECT 1 FROM musica WHERE nombre=?", (nombre,)).fetchone():
+                    nombre, n = f"{base} {n}", n + 1
+                db().execute("INSERT INTO musica (nombre, animo, archivo, duracion, subido_por, "
+                             "creado) VALUES (?,?,?,?,?,?)",
+                             (nombre, animo, destino, dur, usuario_actual()["id"], time.time()))
+                subidos.append(nombre)
             db().commit()
-            flash(f"Tema “{nombre}” agregado a la biblioteca.", "ok")
+            if subidos:
+                flash(f"{len(subidos)} tema{'s' if len(subidos) != 1 else ''} agregado"
+                      f"{'s' if len(subidos) != 1 else ''}: " + ", ".join(subidos), "ok")
+            if rechazados:
+                flash("No se pudieron leer: " + ", ".join(rechazados), "error")
+        elif accion == "renombrar":
+            nombre = request.form.get("nombre", "").strip()[:80]
+            animo = request.form.get("animo", "").strip()[:40]
+            if nombre:
+                db().execute("UPDATE musica SET nombre=?, animo=? WHERE id=?",
+                             (nombre, animo, request.form.get("id", "0")))
+                db().commit()
+                flash("Tema actualizado.", "ok")
         elif accion == "borrar":
             fila = db().execute("SELECT * FROM musica WHERE id=?",
                                 (request.form.get("id", "0"),)).fetchone()

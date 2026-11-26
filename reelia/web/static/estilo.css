@@ -220,3 +220,7 @@ label.check.ia strong { color: var(--texto); }
 .escuchar.btn { margin: 0; background: var(--tarjeta); color: var(--texto); }
 .escuchar.sonando { border-color: var(--marca); color: var(--marca); }
 .sub-seccion small { font-weight: 400; color: var(--suave); }
+.renombrar { display: grid; grid-template-columns: 1fr 120px auto auto; gap: 8px; align-items: center; }
+.renombrar input { padding: 6px 10px; font-size: .88rem; }
+@media (max-width: 560px) { .renombrar { grid-template-columns: 1fr 1fr; } }
+.escuchar { white-space: nowrap; }
