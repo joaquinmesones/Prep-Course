@@ -45,7 +45,30 @@ def usar_formato(nombre):
 def es_horizontal():
     return W > H
 FPS = 30
-TRANSICION = 0.6  # segundos de fundido entre tomas
+TRANSICION = 0.6  # segundos de transición entre tomas
+
+# Transiciones que se pueden elegir (nombre en la plataforma -> efecto de ffmpeg xfade).
+# "variadas" va rotando para que el video tenga ritmo; "ninguna" es corte directo.
+TRANSICIONES = {
+    "variadas": None,
+    "fundido": "fade",
+    "deslizar": "smoothleft",
+    "zoom": "zoomin",
+    "circulo": "circleopen",
+    "barrido": "wipeleft",
+    "negro": "fadeblack",
+    "ninguna": None,
+}
+ROTACION = ["smoothleft", "zoomin", "fade", "circleopen", "slideup", "wipeleft", "dissolve"]
+
+
+def efecto_transicion(estilo, i):
+    """Efecto para la unión número i (empieza en 1), o None para un corte directo."""
+    if estilo == "ninguna":
+        return None
+    if estilo == "variadas" or estilo not in TRANSICIONES:
+        return ROTACION[(i - 1) % len(ROTACION)]
+    return TRANSICIONES[estilo]
 
 FUENTE_BOLD = "/usr/share/fonts/opentype/inter/Inter-Bold.otf"
 FUENTE_SEMI = "/usr/share/fonts/opentype/inter/Inter-SemiBold.otf"
@@ -459,20 +482,28 @@ def render_toma(foto, overlay_png, seg, idx, salida):
          "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p", salida])
 
 
-def unir_con_transiciones(tomas, segs, salida):
+def unir_con_transiciones(tomas, segs, salida, estilo="variadas"):
+    """Une las tomas. Entre fotos usa la transición elegida; hacia el cierre, siempre fundido."""
     entradas = []
     for t in tomas:
         entradas += ["-i", t]
-    partes = []
-    ultimo = "[0:v]"
-    offset = 0.0
+    # misma base de tiempo en todas las entradas (xfade y concat se mezclan)
+    partes = [f"[{i}:v]settb=AVTB,setpts=PTS-STARTPTS,fps={FPS}[n{i}]" for i in range(len(tomas))]
+    ultimo = "[n0]"
+    fin = segs[0]  # dónde termina hasta ahora el video unido
     for i in range(1, len(tomas)):
-        offset += segs[i - 1] - TRANSICION
+        efecto = "fade" if i == len(tomas) - 1 else efecto_transicion(estilo, i)
         etiqueta = f"[x{i}]"
-        partes.append(f"{ultimo}[{i}:v]xfade=transition=fade:duration={TRANSICION}:"
-                      f"offset={offset:.3f}{etiqueta}")
+        if efecto:
+            offset = fin - TRANSICION
+            partes.append(f"{ultimo}[n{i}]xfade=transition={efecto}:duration={TRANSICION}:"
+                          f"offset={offset:.3f}{etiqueta}")
+            fin = offset + segs[i]
+        else:  # corte directo
+            partes.append(f"{ultimo}[n{i}]concat=n=2:v=1:a=0,settb=AVTB,fps={FPS}{etiqueta}")
+            fin += segs[i]
         ultimo = etiqueta
-    if not partes:
+    if len(tomas) == 1:
         shutil.copy(tomas[0], salida)
         return
     run(["ffmpeg", "-y", "-v", "error", *entradas, "-filter_complex", ";".join(partes),
@@ -522,6 +553,7 @@ def main():
     ap.add_argument("--max-fotos", type=int, default=12)
     ap.add_argument("--guion", action="store_true", help="solo imprimir el guion de la voz")
     ap.add_argument("--formato", choices=list(FORMATOS), default="vertical")
+    ap.add_argument("--transicion", choices=list(TRANSICIONES), default="variadas")
     a = ap.parse_args()
 
     with open(a.datos, encoding="utf-8") as f:
@@ -592,7 +624,7 @@ def main():
         segs.append(3.5)
 
         mudo = os.path.join(tmp, "mudo.mp4")
-        unir_con_transiciones(tomas, segs, mudo)
+        unir_con_transiciones(tomas, segs, mudo, a.transicion)
         logo = d.get("logo")
         pie_png = ficha_png = None
         if d.get("logo_pie", True) and logo and os.path.exists(logo):

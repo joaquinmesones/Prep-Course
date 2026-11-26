@@ -210,3 +210,5 @@ label.check.ia strong { color: var(--texto); }
 .info .autor { font-size: .82rem; color: var(--texto); }
 .info .fecha { font-size: .76rem; color: var(--suave); }
 .autor-video { margin: 0 0 8px; }
+.transiciones { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.transiciones span { font-size: .86rem; }

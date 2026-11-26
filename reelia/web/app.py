@@ -37,6 +37,7 @@ MOTOR = os.environ.get("REELIA_MOTOR",
 EXT_FOTOS = {".jpg", ".jpeg", ".png", ".webp"}
 EXT_CLIPS = {".mp4", ".mov", ".m4v", ".webm", ".avi", ".mkv", ".3gp"}
 MAX_CLIPS = 10
+TRANSICIONES = ("variadas", "fundido", "deslizar", "zoom", "circulo", "barrido", "negro", "ninguna")
 MOTOR_VIDEOS = os.path.join(os.path.dirname(MOTOR), "reelia_videos.py")
 sys.path.insert(0, os.path.dirname(MOTOR))  # para importar el curador de fotos
 
@@ -379,6 +380,7 @@ def datos_del_formulario(f, carpeta, logo_actual=None):
         "color_marca": f.get("color_marca", "#F40009"),
         "formato": "horizontal" if f.get("formato") == "horizontal" else "vertical",
         "ficha": bool(f.get("ficha")),
+        "transicion": f.get("transicion") if f.get("transicion") in TRANSICIONES else "variadas",
     }
     logo = request.files.get("logo")
     if logo and logo.filename:
@@ -471,7 +473,8 @@ def renderizar(vid, estilo):
                "--segundos-por-foto", "3.4"]
         limite = 900
     nuevo = os.path.join(carpeta, "video_nuevo.mp4")
-    cmd += ["--formato", datos.get("formato", "vertical")]
+    cmd += ["--formato", datos.get("formato", "vertical"),
+            "--transicion", datos.get("transicion", "variadas")]
     cmd += ["--datos", os.path.join(carpeta, "propiedad.json"),
             "--salida", nuevo, "--estilo-musica", estilo]
     try:

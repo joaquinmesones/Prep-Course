@@ -33,13 +33,21 @@
   </section>
 
   <section class="tarjeta">
-    <h2><span class="paso">4</span> Formato</h2>
+    <h2><span class="paso">4</span> Formato y transiciones</h2>
     <div class="opciones formatos">
       {% set formato = d.formato or 'vertical' %}
       <label><input type="radio" name="formato" value="vertical" {{ 'checked' if formato == 'vertical' }}><span><i class="forma v"></i><strong>Vertical 9:16</strong>Reels, Historias, TikTok</span></label>
       <label><input type="radio" name="formato" value="horizontal" {{ 'checked' if formato == 'horizontal' }}><span><i class="forma h"></i><strong>Horizontal 16:9</strong>YouTube, Facebook, portales, WhatsApp</span></label>
     </div>
     <p class="nota">Con fotos horizontales, el formato horizontal las muestra completas.</p>
+
+    <h3 class="sub-seccion">Transiciones</h3>
+    <div class="opciones transiciones">
+      {% set trans = d.transicion or 'variadas' %}
+      {% for valor, nombre, desc in [('variadas', 'Variadas', 'Cambian en cada foto (recomendado)'), ('fundido', 'Fundido', 'Suave y elegante'), ('deslizar', 'Deslizar', 'Como pasar historias'), ('zoom', 'Zoom', 'Acerca hacia la siguiente'), ('circulo', 'Círculo', 'Se abre desde el centro'), ('barrido', 'Barrido', 'Cortina de lado a lado'), ('negro', 'Pasando por negro', 'Clásico de cine'), ('ninguna', 'Sin transición', 'Corte directo')] %}
+      <label><input type="radio" name="transicion" value="{{ valor }}" {{ 'checked' if trans == valor }}><span><strong>{{ nombre }}</strong>{{ desc }}</span></label>
+      {% endfor %}
+    </div>
   </section>
 
   <section class="tarjeta">

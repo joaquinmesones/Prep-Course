@@ -142,7 +142,7 @@ def render_cierre(d, marca, fondo, salida):
     return CIERRE
 
 
-def unir(piezas, salida):
+def unir(piezas, salida, estilo="variadas"):
     """Une las piezas: fundido entre piezas con fundido=True, corte seco en el resto.
     Devuelve el inicio de cada pieza en el video final."""
     entradas, filtros, inicios = [], [], []
@@ -154,11 +154,18 @@ def unir(piezas, salida):
     v, a = "[iv0]", "[ia0]"
     t = piezas[0]["dur"]
     inicios.append(0.0)
+    union = 0
     for i in range(1, len(piezas)):
         p = piezas[i]
-        if p["fundido"]:
+        efecto = None
+        if p.get("cierre"):
+            efecto = "fade"
+        elif p["fundido"]:
+            union += 1
+            efecto = rf.efecto_transicion(estilo, union)
+        if efecto:
             off = t - FUNDIDO
-            filtros.append(f"{v}[iv{i}]xfade=transition=fade:duration={FUNDIDO}:"
+            filtros.append(f"{v}[iv{i}]xfade=transition={efecto}:duration={FUNDIDO}:"
                            f"offset={off:.3f}[v{i}]")
             filtros.append(f"{a}[ia{i}]acrossfade=d={FUNDIDO}[a{i}]")
             inicios.append(off)
@@ -314,7 +321,8 @@ def mezclar(video, musica, con_voz, salida):
 
 # ---------------------------------------------------------------------- main
 def armar(clips, d, salida, objetivo=30.0, subtitulos=True, estilo_musica="calido",
-          ambiente=False, transcriptor=None, informe=None, formato="vertical"):
+          ambiente=False, transcriptor=None, informe=None, formato="vertical",
+          transicion="variadas"):
     global W, H
     rf.usar_formato(formato)
     W, H = rf.W, rf.H
@@ -378,12 +386,12 @@ def armar(clips, d, salida, objetivo=30.0, subtitulos=True, estilo_musica="calid
         fondo = Image.open(analisis[0]["cuadro"])
         cierre = os.path.join(tmp, "cierre.mp4")
         piezas.append({"archivo": cierre, "dur": render_cierre(d, marca, fondo, cierre),
-                       "fundido": True})
+                       "fundido": True, "cierre": True})
         print(f"  {len(piezas) - 1} tramos listos, uniendo…")
 
         # 4) unir
         unido = os.path.join(tmp, "unido.mp4")
-        inicios, _ = unir(piezas, unido)
+        inicios, _ = unir(piezas, unido, transicion)
 
         # 5) subtítulos en la línea de tiempo final
         subs_ass = None
@@ -447,11 +455,12 @@ def main():
                     choices=["calido", "moderno", "sereno", "ninguno"])
     ap.add_argument("--informe", help="guardar un resumen .json de la edición")
     ap.add_argument("--formato", choices=list(rf.FORMATOS), default="vertical")
+    ap.add_argument("--transicion", choices=list(rf.TRANSICIONES), default="variadas")
     a = ap.parse_args()
     with open(a.datos, encoding="utf-8") as fh:
         d = json.load(fh)
     armar(a.clips, d, a.salida, a.objetivo, not a.sin_subtitulos, a.estilo_musica,
-          a.con_ambiente, informe=a.informe, formato=a.formato)
+          a.con_ambiente, informe=a.informe, formato=a.formato, transicion=a.transicion)
 
 
 if __name__ == "__main__":
