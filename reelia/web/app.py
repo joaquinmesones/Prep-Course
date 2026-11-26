@@ -16,6 +16,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -65,25 +66,69 @@ _voces_cache = {"t": 0, "voces": [], "error": None}
 
 
 def voces_cuenta():
-    """Voces para elegir. Si el administrador cargó voces en VideoLabs, se usan esas;
-    si no, se intenta leer "My Voices" de la cuenta de ElevenLabs (cada 10 minutos)."""
+    """Voces para elegir: las de VideoLabs (compartidas) + la voz clonada del usuario.
+    Si todavía no hay ninguna compartida, intenta traer voces argentinas automáticamente."""
     if not voz_disponible():
         return [], None
-    propias = db().execute("SELECT * FROM voces ORDER BY nombre").fetchall()
-    if propias:
-        return [{"id": v["voice_id"], "nombre": v["nombre"], "descripcion": v["descripcion"] or "",
-                 "muestra": url_for("voz_muestra", vid=v["id"])} for v in propias], None
-    if time.time() - _voces_cache["t"] > 600 or _voces_cache["error"]:
+    u = usuario_actual()
+    error = None
+    hay_compartidas = db().execute("SELECT 1 FROM voces WHERE usuario_id IS NULL").fetchone()
+    if not hay_compartidas and time.time() - _voces_cache["t"] > 1800:
+        _voces_cache["t"] = time.time()
         try:
-            import reelia_voz
-            _voces_cache.update(t=time.time(), voces=reelia_voz.listar_voces(), error=None)
+            semillar_voces()
         except Exception as e:  # noqa: BLE001
-            _voces_cache.update(t=time.time(), voces=[], error=str(e))
-    error = _voces_cache["error"]
-    if error and "permiso" in error:
-        error = ("Todavía no hay voces cargadas. Un administrador puede agregarlas en "
-                 "“Voces” (menú de arriba) con el ID de cada voz de ElevenLabs.")
-    return _voces_cache["voces"], error
+            _voces_cache["error"] = str(e)
+    filas = db().execute("SELECT * FROM voces WHERE usuario_id IS NULL OR usuario_id=? "
+                         "ORDER BY (usuario_id IS NULL), nombre", (u["id"],)).fetchall()
+    if not filas:
+        error = _voces_cache["error"] or "Todavía no hay voces cargadas."
+        if "permiso" in error or "Voces" in error:
+            error = ("No se pudieron traer las voces argentinas: a la clave de ElevenLabs le falta "
+                     "el permiso “Voces: Escribir”.")
+    voces = []
+    for v in filas:
+        propia = v["usuario_id"] == u["id"]
+        voces.append({"id": v["voice_id"], "nombre": ("Mi voz" if propia else v["nombre"]),
+                      "descripcion": "Clonada de tu voz" if propia else (v["descripcion"] or ""),
+                      "muestra": v["muestra_url"] or url_for("voz_muestra", vid=v["id"]),
+                      "propia": propia})
+    return voces, error
+
+
+def semillar_voces(cantidad=4):
+    """Agrega a VideoLabs voces argentinas de la Voice Library (mitad hombre, mitad mujer)."""
+    sys.path.insert(0, os.path.dirname(MOTOR))
+    import reelia_voz
+    candidatas = reelia_voz.buscar_voces_argentinas(20)
+    if not candidatas:
+        raise reelia_voz.ErrorVoz("No se encontraron voces con acento argentino en la biblioteca.")
+    hombres = [v for v in candidatas if v["genero"].startswith("m")]
+    mujeres = [v for v in candidatas if v["genero"].startswith("f")]
+    elegidas = hombres[:cantidad // 2] + mujeres[:cantidad // 2]
+    elegidas += [v for v in candidatas if v not in elegidas][:cantidad - len(elegidas)]
+    agregadas = 0
+    for v in elegidas:
+        if agregar_voz_biblioteca(v):
+            agregadas += 1
+    return agregadas
+
+
+def agregar_voz_biblioteca(v):
+    sys.path.insert(0, os.path.dirname(MOTOR))
+    import reelia_voz
+    if db().execute("SELECT 1 FROM voces WHERE voice_id=? OR origen_id=?",
+                    (v["voice_id"], v["voice_id"])).fetchone():
+        return False  # ya está cargada
+    voice_id = reelia_voz.agregar_de_biblioteca(v["public_owner_id"], v["voice_id"], v["nombre"])
+    db().execute("INSERT OR IGNORE INTO voces (nombre, voice_id, descripcion, creado, tipo, "
+                 "muestra_url, origen_id) VALUES (?,?,?,?,?,?,?)",
+                 (v["nombre"][:60], voice_id, (v.get("descripcion") or "")[:80], time.time(),
+                  "biblioteca", v.get("muestra"), v["voice_id"]))
+    db().commit()
+    return True
+
+
 MAX_FOTOS = 15
 
 app = Flask(__name__)
@@ -146,6 +191,11 @@ def iniciar_db():
     os.makedirs(DATOS, exist_ok=True)
     c = db_suelta()
     c.executescript(ESQUEMA)
+    for columna in ("usuario_id INTEGER", "tipo TEXT", "muestra_url TEXT", "origen_id TEXT"):
+        try:  # columnas agregadas después: voces clonadas por usuario y de la biblioteca
+            c.execute(f"ALTER TABLE voces ADD COLUMN {columna}")
+        except sqlite3.OperationalError:
+            pass
     c.commit()
     c.close()
 
@@ -660,10 +710,108 @@ def voces():
         elif accion == "borrar":
             db().execute("DELETE FROM voces WHERE id=?", (request.form.get("id", "0"),))
             db().commit()
-            flash("Voz eliminada.", "ok")
-        return redirect(url_for("voces"))
-    lista = db().execute("SELECT * FROM voces ORDER BY nombre").fetchall()
-    return render_template("voces.html", lista=lista)
+            flash("Voz quitada de VideoLabs.", "ok")
+        elif accion == "semillar":
+            try:
+                n = semillar_voces()
+                flash(f"Se agregaron {n} voces argentinas." if n else
+                      "Las voces argentinas sugeridas ya estaban cargadas.", "ok")
+            except Exception as e:  # noqa: BLE001
+                flash(f"No se pudieron traer las voces: {e}", "error")
+        elif accion == "agregar_biblioteca":
+            try:
+                agregar_voz_biblioteca({k: request.form.get(k, "") for k in
+                                        ("public_owner_id", "voice_id", "nombre", "descripcion",
+                                         "muestra")})
+                flash(f"Voz “{request.form.get('nombre')}” agregada.", "ok")
+            except Exception as e:  # noqa: BLE001
+                flash(f"No se pudo agregar la voz: {e}", "error")
+        return redirect(url_for("voces", buscar=request.form.get("buscar") or None))
+    lista = db().execute("SELECT v.*, u.nombre AS duenio, u.email AS duenio_email FROM voces v "
+                         "LEFT JOIN usuarios u ON u.id = v.usuario_id "
+                         "ORDER BY (v.usuario_id IS NOT NULL), v.nombre").fetchall()
+    resultados, error_busqueda = [], None
+    if request.args.get("buscar"):
+        try:
+            sys.path.insert(0, os.path.dirname(MOTOR))
+            import reelia_voz
+            cargadas = {r["voice_id"] for r in lista} | {r["origen_id"] for r in lista}
+            resultados = [v for v in reelia_voz.buscar_voces_argentinas(20)
+                          if v["voice_id"] not in cargadas]
+        except Exception as e:  # noqa: BLE001
+            error_busqueda = str(e)
+    return render_template("voces.html", lista=lista, resultados=resultados,
+                           error_busqueda=error_busqueda)
+
+
+TEXTO_PARA_CLONAR = (
+    "Hola, ¿cómo estás? Te cuento sobre esta propiedad que tenemos disponible. Está muy bien "
+    "ubicada, cerca de todo, con mucha luz natural y ambientes amplios. El living da a un balcón "
+    "con una vista hermosa, la cocina está integrada y los dormitorios son cómodos y luminosos. "
+    "Es ideal para una familia o para alguien que busca su primer hogar. Si te interesa, "
+    "escribinos por WhatsApp y coordinamos una visita cuando te quede cómodo. Te esperamos, "
+    "va a ser un gusto mostrártela. Y si tenés alguna duda sobre la financiación o los papeles, "
+    "también te ayudamos con eso.")
+
+
+@app.route("/cuenta/voz", methods=["GET", "POST"])
+@login_requerido
+def mi_voz():
+    u = usuario_actual()
+    propia = db().execute("SELECT * FROM voces WHERE usuario_id=?", (u["id"],)).fetchone()
+    if request.method == "POST":
+        sys.path.insert(0, os.path.dirname(MOTOR))
+        import reelia_voz
+        if request.form.get("accion") == "borrar" and propia:
+            reelia_voz.borrar_voz(propia["voice_id"])
+            db().execute("DELETE FROM voces WHERE id=?", (propia["id"],))
+            db().commit()
+            flash("Tu voz clonada se eliminó.", "ok")
+            return redirect(url_for("mi_voz"))
+        if not voz_disponible():
+            abort(400)
+        if not request.form.get("consentimiento"):
+            flash("Tenés que confirmar que la voz es tuya y que autorizás clonarla.", "error")
+            return redirect(url_for("mi_voz"))
+        archivos = [a for a in request.files.getlist("audio") if a and a.filename]
+        if not archivos:
+            flash("Grabá o subí un audio.", "error")
+            return redirect(url_for("mi_voz"))
+        carpeta = tempfile.mkdtemp(prefix="clon_")
+        try:
+            listos, total = [], 0.0
+            for i, a in enumerate(archivos[:5]):
+                crudo = os.path.join(carpeta, f"crudo_{i}")
+                a.save(crudo)
+                mp3 = os.path.join(carpeta, f"muestra_{i}.mp3")
+                r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", crudo, "-ac", "1",
+                                    "-ar", "44100", "-b:a", "128k", mp3],
+                                   capture_output=True, text=True)
+                dur = duracion_audio(mp3) if r.returncode == 0 else None
+                if dur:
+                    listos.append(mp3)
+                    total += dur
+            if total < 30:
+                flash(f"El audio dura {int(total)} segundos: grabá al menos 30 segundos "
+                      "(lo ideal es 1 minuto o más).", "error")
+                return redirect(url_for("mi_voz"))
+            nombre = f"VideoLabs – {u['nombre'] or u['email']}"
+            voice_id = reelia_voz.clonar_voz(nombre, listos, "Voz clonada desde VideoLabs")
+            if propia:  # reemplaza la anterior
+                reelia_voz.borrar_voz(propia["voice_id"])
+                db().execute("DELETE FROM voces WHERE id=?", (propia["id"],))
+            db().execute("INSERT INTO voces (nombre, voice_id, descripcion, creado, usuario_id, "
+                         "tipo) VALUES (?,?,?,?,?,?)",
+                         (nombre[:60], voice_id, "Voz clonada", time.time(), u["id"], "clonada"))
+            db().commit()
+            flash("¡Listo! Tu voz quedó clonada. Escuchala abajo y ya la podés elegir en tus "
+                  "videos.", "ok")
+        except Exception as e:  # noqa: BLE001
+            flash(f"No se pudo clonar la voz: {e}", "error")
+        finally:
+            shutil.rmtree(carpeta, ignore_errors=True)
+        return redirect(url_for("mi_voz"))
+    return render_template("mi_voz.html", propia=propia, texto=TEXTO_PARA_CLONAR)
 
 
 @app.route("/voces/<int:vid>/muestra.mp3")

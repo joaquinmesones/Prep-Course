@@ -75,6 +75,105 @@ def listar_voces():
     return voces
 
 
+def _multipart(campos, archivos):
+    """Arma un cuerpo multipart/form-data: campos [(nombre, valor)], archivos [(nombre, ruta)]."""
+    import uuid
+    limite = uuid.uuid4().hex
+    cuerpo = b""
+    for k, v in campos:
+        cuerpo += (f"--{limite}\r\nContent-Disposition: form-data; name=\"{k}\"\r\n\r\n"
+                   f"{v}\r\n").encode()
+    for k, ruta in archivos:
+        nombre = os.path.basename(ruta)
+        with open(ruta, "rb") as fh:
+            cuerpo += (f"--{limite}\r\nContent-Disposition: form-data; name=\"{k}\"; "
+                       f"filename=\"{nombre}\"\r\nContent-Type: audio/mpeg\r\n\r\n").encode()
+            cuerpo += fh.read() + b"\r\n"
+    cuerpo += f"--{limite}--\r\n".encode()
+    return cuerpo, f"multipart/form-data; boundary={limite}"
+
+
+def _pedido_multipart(ruta, campos, archivos, timeout=180):
+    cuerpo, tipo = _multipart(campos, archivos)
+    req = urllib.request.Request(BASE + ruta, data=cuerpo, method="POST",
+                                 headers={"xi-api-key": _clave(), "Content-Type": tipo})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.read()
+    except urllib.error.HTTPError as e:
+        detalle = e.read().decode(errors="replace")[:400]
+        if "permission" in detalle.lower():
+            raise ErrorVoz("A la clave de ElevenLabs le falta el permiso “Voces: Escribir”.") from e
+        raise ErrorVoz(f"ElevenLabs respondió {e.code}: {detalle}") from e
+    except urllib.error.URLError as e:
+        raise ErrorVoz(f"No se pudo conectar con ElevenLabs: {e.reason}") from e
+
+
+def _es_argentina(v):
+    texto = " ".join(str(v.get(k) or "") for k in
+                     ("accent", "locale", "description", "name", "descriptive")).lower()
+    return "argentin" in texto or "es-ar" in texto or "rioplatense" in texto or "porteñ" in texto
+
+
+def buscar_voces_argentinas(cantidad=12):
+    """Busca en la Voice Library voces en español con acento argentino.
+    Devuelve [{public_owner_id, voice_id, nombre, genero, descripcion, muestra}]."""
+    from urllib.parse import urlencode
+    vistos, encontradas = set(), []
+    intentos = [{"language": "es", "accent": "argentine"}, {"language": "es", "locale": "es-AR"},
+                {"language": "es", "search": "argentina"}, {"search": "argentino"},
+                {"search": "argentinian"}]
+    for params in intentos:
+        try:
+            datos = json.loads(_pedido("GET", "/v1/shared-voices?" + urlencode(
+                {"page_size": 50, **params}), timeout=30))
+        except ErrorVoz:
+            if not encontradas and params is intentos[0]:
+                raise
+            continue
+        for v in datos.get("voices", []):
+            clave = v.get("voice_id")
+            if not clave or clave in vistos or not _es_argentina(v):
+                continue
+            vistos.add(clave)
+            encontradas.append({
+                "public_owner_id": v.get("public_owner_id"), "voice_id": clave,
+                "nombre": v.get("name", "Voz"), "genero": (v.get("gender") or "").lower(),
+                "descripcion": " · ".join(x for x in (v.get("gender"), v.get("age"),
+                                                      v.get("descriptive") or v.get("use_case")) if x),
+                "muestra": v.get("preview_url"),
+                "uso": v.get("cloned_by_count") or v.get("usage_character_count_1y") or 0})
+        if len(encontradas) >= cantidad:
+            break
+    encontradas.sort(key=lambda v: -(v["uso"] or 0))  # las más usadas primero
+    return encontradas[:cantidad]
+
+
+def agregar_de_biblioteca(public_owner_id, voice_id, nombre):
+    """Agrega una voz de la Voice Library a la cuenta y devuelve el voice_id para usarla."""
+    datos = json.loads(_pedido("POST", f"/v1/voices/add/{public_owner_id}/{voice_id}",
+                               {"new_name": nombre}, timeout=30))
+    return datos.get("voice_id") or voice_id
+
+
+def clonar_voz(nombre, audios, descripcion=""):
+    """Clonación instantánea: crea una voz con 1 o más audios y devuelve su voice_id."""
+    datos = json.loads(_pedido_multipart(
+        "/v1/voices/add", [("name", nombre), ("description", descripcion),
+                           ("remove_background_noise", "true")],
+        [("files", a) for a in audios]))
+    if not datos.get("voice_id"):
+        raise ErrorVoz("ElevenLabs no devolvió la voz clonada.")
+    return datos["voice_id"]
+
+
+def borrar_voz(voice_id):
+    try:
+        _pedido("DELETE", f"/v1/voices/{voice_id}", timeout=30)
+    except ErrorVoz:
+        pass  # si ya no existe en la cuenta, no importa
+
+
 def sintetizar(texto, voice_id, salida):
     """Genera el audio y lo guarda como mp3. Devuelve la cantidad de caracteres usados."""
     texto = " ".join(texto.split())

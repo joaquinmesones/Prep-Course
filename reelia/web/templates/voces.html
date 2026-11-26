@@ -4,39 +4,61 @@
 <h1>Voces para la voz en off</h1>
 <div class="dos-col">
   <div class="tarjeta">
-    <h2>Agregar una voz</h2>
+    <h2>Voces argentinas</h2>
+    <p class="nota">VideoLabs busca en la biblioteca de ElevenLabs voces con acento argentino y las agrega a tu cuenta.</p>
     <form method="post">
-      <input type="hidden" name="csrf" value="{{ csrf }}">
-      <input type="hidden" name="accion" value="agregar">
-      <label>Nombre<input name="nombre" placeholder="Ej: Mateo (hombre)" required></label>
-      <label>ID de la voz en ElevenLabs<input name="voice_id" placeholder="Ej: 21m00Tcm4TlvDq8ikWAM" required></label>
-      <label>Descripción <small class="nota">(opcional)</small><input name="descripcion" placeholder="Ej: Cálida, acento porteño"></label>
-      <button class="btn">Agregar voz</button>
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="accion" value="semillar">
+      <button class="btn ancho">Agregar voces argentinas automáticamente</button>
     </form>
-    <div class="nota ayuda">
-      <p><strong>¿Dónde está el ID?</strong></p>
-      <ol>
-        <li>En ElevenLabs entrá a <strong>Voces</strong> (o Voice Library) y buscá “Argentina”.</li>
-        <li>Abrí la voz que te guste: tocá los <strong>tres puntitos (⋯)</strong> → <strong>“Copy voice ID”</strong> (o el ícono de copiar al lado del ID).</li>
-        <li>Pegalo acá con un nombre que reconozcas.</li>
-      </ol>
-    </div>
+    <a class="btn secundario-neutro ancho" href="{{ url_for('voces', buscar=1) }}">Ver más voces argentinas</a>
+
+    <details class="ayuda">
+      <summary>Agregar una voz por ID (avanzado)</summary>
+      <form method="post">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="accion" value="agregar">
+        <label>Nombre<input name="nombre" placeholder="Ej: Mateo (hombre)" required></label>
+        <label>ID de la voz en ElevenLabs<input name="voice_id" placeholder="Ej: 21m00Tcm4TlvDq8ikWAM" required></label>
+        <label>Descripción<input name="descripcion" placeholder="Opcional"></label>
+        <button class="btn chico">Agregar</button>
+      </form>
+    </details>
+    <p class="nota">Las voces clonadas de cada asesor se crean desde <strong>Mi cuenta → Mi voz</strong>.</p>
   </div>
+
   <div class="tarjeta">
-    <h2>Voces cargadas</h2>
-    {% if not lista %}<p class="nota">Todavía no hay voces. Agregá 2 o 3 (por ejemplo una de hombre y una de mujer): son las que van a ver los asesores al crear un video.</p>{% endif %}
+    {% if request.args.get('buscar') %}
+    <h2>Voces argentinas de la biblioteca</h2>
+    {% if error_busqueda %}<div class="aviso error">{{ error_busqueda }}</div>{% endif %}
+    {% if not resultados and not error_busqueda %}<p class="nota">No hay más voces para agregar.</p>{% endif %}
     <table>
-      {% for v in lista %}
+      {% for v in resultados %}
       <tr>
-        <td><strong>{{ v.nombre }}</strong><br><span class="nota">{{ v.descripcion or '' }} <code>{{ v.voice_id }}</code></span></td>
-        <td><button type="button" class="escuchar btn chico" data-src="{{ url_for('voz_muestra', vid=v.id) }}">▶ Escuchar</button></td>
-        <td><form method="post" class="enlinea" onsubmit="return confirm('¿Quitar esta voz?')">
-          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="accion" value="borrar"><input type="hidden" name="id" value="{{ v.id }}">
-          <button class="link">Quitar</button></form></td>
+        <td><strong>{{ v.nombre }}</strong><br><span class="nota">{{ v.descripcion }}</span></td>
+        <td>{% if v.muestra %}<button type="button" class="escuchar btn chico" data-src="{{ v.muestra }}">▶ Escuchar</button>{% endif %}</td>
+        <td><form method="post" class="enlinea">
+          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="accion" value="agregar_biblioteca"><input type="hidden" name="buscar" value="1">
+          {% for k in ('public_owner_id', 'voice_id', 'nombre', 'descripcion', 'muestra') %}<input type="hidden" name="{{ k }}" value="{{ v[k] or '' }}">{% endfor %}
+          <button class="link">+ Agregar</button></form></td>
       </tr>
       {% endfor %}
     </table>
-    <p class="nota">La primera vez que tocás ▶ Escuchar se genera una frase corta de prueba (usa unos pocos créditos) y después queda guardada.</p>
+    <p><a href="{{ url_for('voces') }}">← Volver a las voces cargadas</a></p>
+    {% else %}
+    <h2>Voces cargadas</h2>
+    {% if not lista %}<p class="nota">Todavía no hay voces. Tocá “Agregar voces argentinas automáticamente”.</p>{% endif %}
+    <table>
+      {% for v in lista %}
+      <tr>
+        <td><strong>{{ v.nombre }}</strong><br><span class="nota">
+          {% if v.usuario_id %}Voz clonada de {{ v.duenio or v.duenio_email }} (solo la usa esa persona){% else %}{{ v.descripcion or ('Biblioteca de ElevenLabs' if v.tipo == 'biblioteca' else '') }}{% endif %}</span></td>
+        <td><button type="button" class="escuchar btn chico" data-src="{{ v.muestra_url or url_for('voz_muestra', vid=v.id) }}">▶ Escuchar</button></td>
+        <td>{% if not v.usuario_id %}<form method="post" class="enlinea" onsubmit="return confirm('¿Quitar esta voz de VideoLabs?')">
+          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="accion" value="borrar"><input type="hidden" name="id" value="{{ v.id }}">
+          <button class="link">Quitar</button></form>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% endif %}
   </div>
 </div>
 <script src="{{ url_for('static', filename='escuchar.js') }}"></script>

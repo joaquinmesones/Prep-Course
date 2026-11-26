@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block titulo %}Mi voz{% endblock %}
+{% block contenido %}
+<a class="volver" href="{{ url_for('cuenta') }}">← Mi cuenta</a>
+<h1>Mi voz</h1>
+{% if not voz_disponible %}
+  <div class="tarjeta"><p>La voz en off todavía no está activada en VideoLabs. Pedile al administrador que configure ElevenLabs.</p></div>
+{% else %}
+<div class="dos-col">
+  <div class="tarjeta">
+    {% if propia %}
+      <h2>Tu voz clonada está lista</h2>
+      <p>Aparece como <strong>“Mi voz”</strong> en la sección Voz en off cuando creás un video. Solo vos podés usarla.</p>
+      <button type="button" class="escuchar btn" data-src="{{ url_for('voz_muestra', vid=propia.id) }}">▶ Escuchar una prueba</button>
+      <form method="post" onsubmit="return confirm('¿Eliminar tu voz clonada?')">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="accion" value="borrar">
+        <button class="btn secundario ancho">Eliminar mi voz clonada</button>
+      </form>
+      <p class="nota">Si no te convence cómo suena, volvé a grabar acá al lado: la nueva reemplaza a la anterior.</p>
+    {% else %}
+      <h2>Cloná tu voz</h2>
+      <p>Grabá alrededor de <strong>1 minuto</strong> leyendo el texto. Con eso VideoLabs crea una voz igual a la tuya para narrar tus videos.</p>
+      <ul class="nota">
+        <li>Grabá en un lugar silencioso, sin música ni eco.</li>
+        <li>Hablá natural, como si le contaras la propiedad a un cliente.</li>
+        <li>Con auriculares con micrófono suena mejor que con el de la compu.</li>
+      </ul>
+    {% endif %}
+  </div>
+  <div class="tarjeta">
+    <h2>{{ 'Volver a grabar' if propia else 'Grabar' }}</h2>
+    <div class="texto-lectura">{{ texto }}</div>
+    <form method="post" enctype="multipart/form-data" id="form-voz">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="grabador">
+        <button type="button" class="btn" id="grabar">● Empezar a grabar</button>
+        <span id="tiempo" class="nota"></span>
+      </div>
+      <audio id="escucha" controls hidden></audio>
+      <p class="nota">¿Preferís subir un audio que ya tenés (mp3, m4a, wav, nota de voz)?</p>
+      <input type="file" name="audio" id="archivo" accept="audio/*" multiple>
+      <label class="check"><input type="checkbox" name="consentimiento" required> Confirmo que esta es mi voz y autorizo a clonarla para usarla en mis videos.</label>
+      <button class="btn grande" id="enviar-voz" disabled>Clonar mi voz</button>
+      <p class="nota">Tarda unos segundos. La voz se crea en la cuenta de ElevenLabs de la inmobiliaria.</p>
+    </form>
+  </div>
+</div>
+<script src="{{ url_for('static', filename='mi_voz.js') }}"></script>
+{% endif %}
+<script src="{{ url_for('static', filename='escuchar.js') }}"></script>
+{% endblock %}

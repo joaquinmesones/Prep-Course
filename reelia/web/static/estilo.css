@@ -234,3 +234,8 @@ textarea:focus { outline: 2px solid var(--marca); outline-offset: 1px; }
 .ayuda ol { padding-left: 20px; margin: 6px 0 0; }
 .ayuda li { margin-bottom: 4px; }
 code { font-size: .78rem; background: var(--fondo); padding: 1px 6px; border-radius: 6px; }
+.texto-lectura { background: var(--fondo); border: 1px solid var(--borde); border-left: 4px solid var(--marca); border-radius: 10px; padding: 14px 16px; font-size: 1.02rem; line-height: 1.6; margin-bottom: 16px; }
+.grabador { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+#escucha { width: 100%; margin-bottom: 8px; }
+#form-voz input[type=file] { margin-bottom: 14px; }
+details.ayuda summary { cursor: pointer; font-weight: 600; margin-bottom: 8px; }

@@ -95,6 +95,7 @@
         {% endfor %}
       </div>
       {% elif not voces_error %}<p class="nota">No hay voces cargadas.{% if usuario.admin %} Agregalas en <a href="{{ url_for('voces') }}">Voces</a>.{% endif %}</p>{% endif %}
+      {% if not (voces|selectattr('propia')|list) %}<p class="nota">¿Querés que los videos tengan tu propia voz? <a href="{{ url_for('mi_voz') }}">Cloná tu voz</a> (1 minuto de grabación).</p>{% endif %}
       <h3 class="sub-seccion">Guion</h3>
       <textarea name="guion" id="guion" rows="4" maxlength="1500" placeholder="Si lo dejás vacío, VideoLabs lo arma con los datos de la ficha.">{{ voz.guion or '' }}</textarea>
       <div class="guion-pie"><button type="button" class="btn chico secundario-neutro" id="sugerir-guion">Armar guion con los datos de la ficha</button>
