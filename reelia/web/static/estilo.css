@@ -247,3 +247,12 @@ details.ayuda summary { cursor: pointer; font-weight: 600; margin-bottom: 8px; }
 @media (prefers-color-scheme: dark) { .logo-barra { background: #fff; border-radius: 8px; padding: 4px 8px; border-left: 0; } }
 @media (max-width: 900px) { .logo-barra { height: 30px; } }
 @media (max-width: 640px) { .logo-barra { display: none; } }
+
+/* ingreso con huella */
+.separador { display: flex; align-items: center; gap: 10px; color: var(--suave); font-size: .85rem; margin: 18px 0 14px; }
+.separador::before, .separador::after { content: ""; flex: 1; height: 1px; background: var(--borde); }
+.huella-login .btn { margin-top: 0; }
+.error-huella { color: var(--error); min-height: 1em; margin: 8px 0 0; }
+.aviso-huella { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 18px; border-color: var(--marca); }
+.aviso-huella .btn { margin: 0; }
+.llaves { margin: 12px 0 20px; }

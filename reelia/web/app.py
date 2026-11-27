@@ -176,6 +176,11 @@ CREATE TABLE IF NOT EXISTS videos (
   estado TEXT, error TEXT, datos TEXT, creado REAL, terminado REAL
 );
 CREATE TABLE IF NOT EXISTS intentos_login (ip TEXT, ts REAL);
+CREATE TABLE IF NOT EXISTS llaves (
+  id INTEGER PRIMARY KEY, usuario_id INTEGER NOT NULL, credencial TEXT UNIQUE NOT NULL,
+  clave_publica BLOB NOT NULL, contador INTEGER DEFAULT 0, dispositivo TEXT,
+  creado REAL, usado REAL
+);
 CREATE TABLE IF NOT EXISTS voces (
   id INTEGER PRIMARY KEY, nombre TEXT NOT NULL, voice_id TEXT NOT NULL UNIQUE,
   descripcion TEXT, creado REAL
@@ -221,7 +226,8 @@ def csrf():
     if "csrf" not in session:
         session["csrf"] = secrets.token_urlsafe(32)
     if request.method == "POST":
-        if not secrets.compare_digest(request.form.get("csrf", ""), session["csrf"]):
+        enviado = request.form.get("csrf") or request.headers.get("X-CSRF", "")
+        if not secrets.compare_digest(enviado, session["csrf"]):
             abort(400)
 
 
@@ -321,6 +327,139 @@ def login():
     return render_template("login.html")
 
 
+# ------------------------------------------------- ingreso con huella (passkeys)
+def _rp():
+    """Identidad del sitio para WebAuthn: el dominio y el origen https desde el que se usa."""
+    host = request.host.split(":")[0]
+    rp_id = os.environ.get("REELIA_RP_ID", host)
+    origen = f"{'https' if app.config['SESSION_COOKIE_SECURE'] else request.scheme}://{request.host}"
+    return rp_id, origen
+
+
+def _nombre_dispositivo():
+    ua = request.headers.get("User-Agent", "")
+    for clave, nombre in (("iPhone", "iPhone"), ("iPad", "iPad"), ("Android", "Android"),
+                          ("Macintosh", "Mac"), ("Windows", "Windows"), ("Linux", "Linux")):
+        if clave in ua:
+            return nombre
+    return "Dispositivo"
+
+
+@app.route("/huella/registro/opciones", methods=["POST"])
+@login_requerido
+def huella_registro_opciones():
+    from webauthn import generate_registration_options, options_to_json
+    from webauthn.helpers.structs import (AuthenticatorAttachment, AuthenticatorSelectionCriteria,
+                                          PublicKeyCredentialDescriptor, ResidentKeyRequirement,
+                                          UserVerificationRequirement)
+    from webauthn.helpers import base64url_to_bytes
+    u = usuario_actual()
+    rp_id, _ = _rp()
+    existentes = db().execute("SELECT credencial FROM llaves WHERE usuario_id=?", (u["id"],))
+    opciones = generate_registration_options(
+        rp_id=rp_id, rp_name="VideoLabs", user_id=f"usuario-{u['id']}".encode(),
+        user_name=u["email"], user_display_name=u["nombre"] or u["email"],
+        authenticator_selection=AuthenticatorSelectionCriteria(
+            authenticator_attachment=AuthenticatorAttachment.PLATFORM,  # huella / Face ID del equipo
+            resident_key=ResidentKeyRequirement.REQUIRED,
+            user_verification=UserVerificationRequirement.REQUIRED),
+        exclude_credentials=[PublicKeyCredentialDescriptor(id=base64url_to_bytes(f["credencial"]))
+                             for f in existentes])
+    session["huella_desafio"] = opciones.challenge.hex()
+    return app.response_class(options_to_json(opciones), mimetype="application/json")
+
+
+@app.route("/huella/registro/verificar", methods=["POST"])
+@login_requerido
+def huella_registro_verificar():
+    from webauthn import verify_registration_response
+    from webauthn.helpers import bytes_to_base64url
+    desafio = session.pop("huella_desafio", None)
+    if not desafio:
+        return {"ok": False, "error": "La solicitud venció. Probá de nuevo."}, 400
+    rp_id, origen = _rp()
+    try:
+        r = verify_registration_response(credential=request.get_data(as_text=True),
+                                         expected_challenge=bytes.fromhex(desafio),
+                                         expected_rp_id=rp_id, expected_origin=origen,
+                                         require_user_verification=True)
+    except Exception as e:  # noqa: BLE001
+        app.logger.warning("Registro de huella rechazado: %s", e)
+        return {"ok": False, "error": "No se pudo verificar la huella en este dispositivo."}, 400
+    db().execute("INSERT OR IGNORE INTO llaves (usuario_id, credencial, clave_publica, contador, "
+                 "dispositivo, creado) VALUES (?,?,?,?,?,?)",
+                 (usuario_actual()["id"], bytes_to_base64url(r.credential_id),
+                  r.credential_public_key, r.sign_count, _nombre_dispositivo(), time.time()))
+    db().commit()
+    return {"ok": True}
+
+
+@app.route("/huella/ingreso/opciones", methods=["POST"])
+def huella_ingreso_opciones():
+    from webauthn import generate_authentication_options, options_to_json
+    from webauthn.helpers.structs import UserVerificationRequirement
+    rp_id, _ = _rp()
+    opciones = generate_authentication_options(
+        rp_id=rp_id, user_verification=UserVerificationRequirement.REQUIRED)
+    session["huella_desafio"] = opciones.challenge.hex()
+    return app.response_class(options_to_json(opciones), mimetype="application/json")
+
+
+@app.route("/huella/ingreso/verificar", methods=["POST"])
+def huella_ingreso_verificar():
+    from webauthn import verify_authentication_response
+    ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0]
+    if demasiados_intentos(ip):
+        return {"ok": False, "error": "Demasiados intentos. Probá de nuevo en 15 minutos."}, 429
+    desafio = session.pop("huella_desafio", None)
+    datos = request.get_json(silent=True) or {}
+    llave = db().execute("SELECT l.*, u.activo FROM llaves l JOIN usuarios u ON u.id = l.usuario_id "
+                         "WHERE l.credencial=?", (datos.get("id", ""),)).fetchone()
+    if not desafio or not llave or not llave["activo"]:
+        db().execute("INSERT INTO intentos_login VALUES (?,?)", (ip, time.time()))
+        db().commit()
+        return {"ok": False, "error": "Esta huella no está registrada en VideoLabs. Ingresá con tu "
+                                      "contraseña y activala en Mi cuenta."}, 400
+    rp_id, origen = _rp()
+    try:
+        r = verify_authentication_response(
+            credential=request.get_data(as_text=True), expected_challenge=bytes.fromhex(desafio),
+            expected_rp_id=rp_id, expected_origin=origen,
+            credential_public_key=llave["clave_publica"],
+            credential_current_sign_count=llave["contador"], require_user_verification=True)
+    except Exception as e:  # noqa: BLE001
+        app.logger.warning("Ingreso con huella rechazado: %s", e)
+        db().execute("INSERT INTO intentos_login VALUES (?,?)", (ip, time.time()))
+        db().commit()
+        return {"ok": False, "error": "No se pudo verificar la huella."}, 400
+    db().execute("UPDATE llaves SET contador=?, usado=? WHERE id=?",
+                 (r.new_sign_count, time.time(), llave["id"]))
+    db().commit()
+    session.clear()
+    session.permanent = True
+    session["uid"] = llave["usuario_id"]
+    session["csrf"] = secrets.token_urlsafe(32)
+    return {"ok": True, "destino": url_for("panel")}
+
+
+@app.route("/huella/<int:lid>/borrar", methods=["POST"])
+@login_requerido
+def huella_borrar(lid):
+    db().execute("DELETE FROM llaves WHERE id=? AND usuario_id=?", (lid, usuario_actual()["id"]))
+    db().commit()
+    flash("Se quitó el ingreso con huella de ese dispositivo.", "ok")
+    return redirect(url_for("cuenta"))
+
+
+@app.route("/sw.js")
+def service_worker():
+    """Service worker mínimo para que VideoLabs se pueda instalar como app (PWA)."""
+    r = send_file(os.path.join(BASE, "static", "sw.js"), mimetype="application/javascript",
+                  max_age=0)
+    r.headers["Service-Worker-Allowed"] = "/"
+    return r
+
+
 @app.route("/salir", methods=["POST"])
 def salir():
     session.clear()
@@ -343,7 +482,9 @@ def cuenta():
             db().commit()
             flash("Contraseña actualizada.", "ok")
             return redirect(url_for("panel"))
-    return render_template("cuenta.html")
+    llaves = db().execute("SELECT * FROM llaves WHERE usuario_id=? ORDER BY creado DESC",
+                          (usuario_actual()["id"],)).fetchall()
+    return render_template("cuenta.html", llaves=llaves)
 
 
 # ----------------------------------------------------------------- usuarios
@@ -397,12 +538,14 @@ def video_del_usuario(vid):
 @login_requerido
 def panel():
     u = usuario_actual()
+    tiene_huella = bool(db().execute("SELECT 1 FROM llaves WHERE usuario_id=?",
+                                     (u["id"],)).fetchone())
     consulta = ("SELECT v.*, u.nombre AS autor_nombre, u.email AS autor_email "
                 "FROM videos v JOIN usuarios u ON u.id = v.usuario_id ")
     if not u["admin"]:
         vids = db().execute(consulta + "WHERE v.usuario_id=? ORDER BY v.creado DESC",
                             (u["id"],)).fetchall()
-        return render_template("panel.html", videos=vids, vista="mios")
+        return render_template("panel.html", videos=vids, vista="mios", tiene_huella=tiene_huella)
     # el administrador ve los videos de todos (o filtra por usuario)
     vista = request.args.get("ver", "todos")
     autores = db().execute("SELECT u.id, u.nombre, u.email, COUNT(v.id) AS cantidad "
@@ -417,7 +560,8 @@ def panel():
     else:
         vista = "todos"
         vids = db().execute(consulta + "ORDER BY v.creado DESC").fetchall()
-    return render_template("panel.html", videos=vids, vista=vista, autores=autores)
+    return render_template("panel.html", videos=vids, vista=vista, autores=autores,
+                           tiene_huella=tiene_huella)
 
 
 def numero(valor):

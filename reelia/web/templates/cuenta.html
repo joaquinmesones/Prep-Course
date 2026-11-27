@@ -5,6 +5,19 @@
 <div class="tarjeta angosta">
   <p><strong>{{ usuario.nombre or usuario.email }}</strong><br><span class="nota">{{ usuario.email }}</span></p>
   {% if voz_disponible %}<p><a class="btn secundario-neutro" href="{{ url_for('mi_voz') }}">🎙 Mi voz (clonar mi voz para los videos)</a></p>{% endif %}
+  <h2>Ingreso con huella</h2>
+  {% if request.args.get('huella') %}<div class="aviso ok">¡Listo! La próxima vez tocá “Ingresar con huella” en la pantalla de ingreso.</div>{% endif %}
+  <p class="nota">Entrá a VideoLabs con tu huella o Face ID, sin escribir email ni contraseña. Activalo en cada celular o compu que uses.</p>
+  <div data-huella="cuenta" hidden><button type="button" class="btn activar-huella">👆 Activar en este dispositivo</button></div>
+  {% if llaves %}
+  <table class="llaves">
+    {% for l in llaves %}
+    <tr><td><strong>{{ l.dispositivo }}</strong><br><span class="nota">Activado {{ l.creado|fecha }}{% if l.usado %} · último uso {{ l.usado|fecha }}{% endif %}</span></td>
+      <td><form method="post" action="{{ url_for('huella_borrar', lid=l.id) }}" class="enlinea" onsubmit="return confirm('¿Quitar el ingreso con huella de este dispositivo?')">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><button class="link">Quitar</button></form></td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
   <h2>Cambiar contraseña</h2>
   <form method="post">
     <input type="hidden" name="csrf" value="{{ csrf }}">

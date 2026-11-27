@@ -5,6 +5,12 @@
   <h1>{{ 'Mis videos' if vista == 'mios' or not usuario.admin else 'Videos' }}</h1>
   <a class="btn" href="{{ url_for('nuevo') }}">+ Nuevo video</a>
 </div>
+{% if not tiene_huella %}
+<div class="aviso-huella tarjeta" data-huella="panel" hidden>
+  <span>👆 <strong>Entrá más rápido:</strong> activá el ingreso con huella o Face ID en este dispositivo.</span>
+  <button type="button" class="btn chico activar-huella">Activar</button>
+</div>
+{% endif %}
 {% if usuario.admin %}
 <form class="filtro" method="get">
   <label>Ver
