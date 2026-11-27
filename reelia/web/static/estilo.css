@@ -241,3 +241,9 @@ code { font-size: .78rem; background: var(--fondo); padding: 1px 6px; border-rad
 details.ayuda summary { cursor: pointer; font-weight: 600; margin-bottom: 8px; }
 .logo-cliente { display: block; width: 100%; max-width: 300px; height: auto; margin: 0 auto 22px; padding-bottom: 20px; border-bottom: 1px solid var(--borde); }
 @media (prefers-color-scheme: dark) { .logo-cliente { background: #fff; border-radius: 12px; padding: 10px 14px; border-bottom: 0; } }
+/* logo de la inmobiliaria en la barra */
+.barra { gap: 18px; }
+.logo-barra { height: 38px; width: auto; padding-left: 18px; border-left: 1px solid var(--borde); margin-right: auto; }
+@media (prefers-color-scheme: dark) { .logo-barra { background: #fff; border-radius: 8px; padding: 4px 8px; border-left: 0; } }
+@media (max-width: 900px) { .logo-barra { height: 30px; } }
+@media (max-width: 640px) { .logo-barra { display: none; } }
