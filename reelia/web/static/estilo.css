@@ -239,3 +239,5 @@ code { font-size: .78rem; background: var(--fondo); padding: 1px 6px; border-rad
 #escucha { width: 100%; margin-bottom: 8px; }
 #form-voz input[type=file] { margin-bottom: 14px; }
 details.ayuda summary { cursor: pointer; font-weight: 600; margin-bottom: 8px; }
+.logo-cliente { display: block; width: 100%; max-width: 300px; height: auto; margin: 0 auto 22px; padding-bottom: 20px; border-bottom: 1px solid var(--borde); }
+@media (prefers-color-scheme: dark) { .logo-cliente { background: #fff; border-radius: 12px; padding: 10px 14px; border-bottom: 0; } }
