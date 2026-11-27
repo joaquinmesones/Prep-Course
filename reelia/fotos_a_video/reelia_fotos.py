@@ -359,6 +359,15 @@ def poner_capas_fijas(video, ficha_png, pie_png, hasta, salida):
          "-pix_fmt", "yuv420p", "-movflags", "+faststart", salida])
 
 
+def guardar_capa(img, ruta):
+    """Guarda solo la parte visible de una capa transparente y devuelve (ruta, x, y).
+    Superponer un recuadro chico es mucho más rápido que una imagen de pantalla completa."""
+    caja = img.getchannel("A").getbbox() or (0, 0, 2, 2)
+    x0, y0 = caja[0] // 2 * 2, caja[1] // 2 * 2
+    img.crop((x0, y0, caja[2], caja[3])).save(ruta)
+    return ruta, x0, y0
+
+
 def placa_pie_logo(logo):
     """Franja blanca redondeada con el logo, abajo al centro, para todas las tomas."""
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
@@ -473,9 +482,10 @@ def render_toma(foto, overlay_png, seg, idx, salida):
     filtros = f"[0:v]{mov},setsar=1,fps={FPS},format=yuv420p[v0]"
     entradas = ["-loop", "1", "-t", f"{seg}", "-i", foto]
     if overlay_png:
-        entradas += ["-loop", "1", "-t", f"{seg}", "-i", overlay_png]
+        ruta_ov, ox, oy = overlay_png if isinstance(overlay_png, tuple) else (overlay_png, 0, 0)
+        entradas += ["-loop", "1", "-t", f"{seg}", "-i", ruta_ov]
         filtros += (f";[1:v]format=rgba,fade=in:st=0.35:d=0.45:alpha=1[o];"
-                    f"[v0][o]overlay=0:0:format=auto,format=yuv420p[v]")
+                    f"[v0][o]overlay={ox}:{oy}:format=auto,format=yuv420p[v]")
         mapa = "[v]"
     else:
         mapa = "[v0]"
@@ -484,8 +494,18 @@ def render_toma(foto, overlay_png, seg, idx, salida):
          "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p", salida])
 
 
-def unir_con_transiciones(tomas, segs, salida, estilo="variadas"):
-    """Une las tomas. Entre fotos usa la transición elegida; hacia el cierre, siempre fundido."""
+def duracion_unida(segs, estilo):
+    """Duración final de las tomas unidas (las transiciones se superponen)."""
+    fin = segs[0]
+    for i in range(1, len(segs)):
+        efecto = "fade" if i == len(segs) - 1 else efecto_transicion(estilo, i)
+        fin += segs[i] - (TRANSICION if efecto else 0)
+    return fin
+
+
+def unir_con_transiciones(tomas, segs, salida, estilo="variadas", capas=()):
+    """Une las tomas (la transición elegida entre fotos; fundido hacia el cierre) y, en la
+    misma pasada, superpone las capas fijas: [(ruta, x, y, hasta_segundo o None, fundido)]."""
     entradas = []
     for t in tomas:
         entradas += ["-i", t]
@@ -505,12 +525,18 @@ def unir_con_transiciones(tomas, segs, salida, estilo="variadas"):
             partes.append(f"{ultimo}[n{i}]concat=n=2:v=1:a=0,settb=AVTB,fps={FPS}{etiqueta}")
             fin += segs[i]
         ultimo = etiqueta
-    if len(tomas) == 1:
-        shutil.copy(tomas[0], salida)
-        return
+    n = len(tomas)
+    for k, (ruta, x, y, hasta, fundido) in enumerate(capas):
+        entradas += ["-loop", "1", "-t", f"{fin:.3f}", "-i", ruta]
+        efecto = ",fade=in:st=0.15:d=0.5:alpha=1" if fundido else ""
+        partes.append(f"[{n + k}:v]format=rgba{efecto}[c{k}]")
+        cuando = f":enable='lt(t,{hasta:.3f})'" if hasta else ""
+        partes.append(f"{ultimo}[c{k}]overlay={x}:{y}{cuando}[o{k}]")
+        ultimo = f"[o{k}]"
+    partes.append(f"{ultimo}format=yuv420p[final]")
     run(["ffmpeg", "-y", "-v", "error", *entradas, "-filter_complex", ";".join(partes),
-         "-map", ultimo, "-c:v", "libx264", "-preset", "medium", "-crf", "20",
-         "-pix_fmt", "yuv420p", "-movflags", "+faststart", salida])
+         "-map", "[final]", "-t", f"{fin:.3f}", "-c:v", "libx264", "-preset", "veryfast",
+         "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart", salida])
 
 
 def mezclar_audio(video, voz, musica, salida):
@@ -600,15 +626,14 @@ def main():
             ov = None
             if i == 0:
                 if not ficha:
-                    ov = os.path.join(tmp, f"ov_{i}.png")
-                    placa_portada(d, marca).save(ov)
+                    ov = guardar_capa(placa_portada(d, marca), os.path.join(tmp, f"ov_{i}.png"))
             elif etiquetas_fijas is not None:
                 if etiquetas_fijas[i]:
-                    ov = os.path.join(tmp, f"ov_{i}.png")
-                    placa_dato(etiquetas_fijas[i], marca).save(ov)
+                    ov = guardar_capa(placa_dato(etiquetas_fijas[i], marca),
+                                      os.path.join(tmp, f"ov_{i}.png"))
             elif i - 1 < len(etiquetas):
-                ov = os.path.join(tmp, f"ov_{i}.png")
-                placa_dato(etiquetas[i - 1], marca).save(ov)
+                ov = guardar_capa(placa_dato(etiquetas[i - 1], marca),
+                                  os.path.join(tmp, f"ov_{i}.png"))
             dur_toma = seg + (0.6 if i == 0 else 0)
             out = os.path.join(tmp, f"toma_{i:02d}.mp4")
             render_toma(limpia, ov, dur_toma, i, out)
@@ -626,21 +651,19 @@ def main():
         tomas.append(cierre)
         segs.append(3.5)
 
-        mudo = os.path.join(tmp, "mudo.mp4")
-        unir_con_transiciones(tomas, segs, mudo, a.transicion)
-        logo = d.get("logo")
-        pie_png = ficha_png = None
-        if d.get("logo_pie", True) and logo and os.path.exists(logo):
-            pie_png = os.path.join(tmp, "pie.png")
-            placa_pie_logo(logo).save(pie_png)
+        # capas fijas (ficha y logo al pie) en la misma pasada que la unión: una sola codificación
+        capas = []
+        total = duracion_unida(segs, a.transicion)
         if ficha:
-            ficha_png = os.path.join(tmp, "ficha.png")
-            placa_ficha(d, marca).save(ficha_png)
-        if pie_png or ficha_png:
-            con_capas = os.path.join(tmp, "con_capas.mp4")
+            capas.append((*guardar_capa(placa_ficha(d, marca), os.path.join(tmp, "ficha.png")),
+                          None, True))
+        logo = d.get("logo")
+        if d.get("logo_pie", True) and logo and os.path.exists(logo):
             # el cierre ya muestra el logo grande: el pie se va cuando empieza el fundido
-            poner_capas_fijas(mudo, ficha_png, pie_png, duracion(mudo) - 3.5, con_capas)
-            mudo = con_capas
+            capas.append((*guardar_capa(placa_pie_logo(logo), os.path.join(tmp, "pie.png")),
+                          total - 3.5, False))
+        mudo = os.path.join(tmp, "mudo.mp4")
+        unir_con_transiciones(tomas, segs, mudo, a.transicion, capas)
         musica = a.musica
         if not musica and a.estilo_musica != "ninguno":
             musica = os.path.join(tmp, "musica.mp3")

@@ -263,11 +263,10 @@ def capas_finales(video, d, marca, subs_ass, tmp, salida):
     filtros = []
     n = 1
     if d.get("ficha", True):  # ficha fija arriba durante todo el video
-        ficha = os.path.join(tmp, "ficha.png")
-        rf.placa_ficha(d, marca).save(ficha)
+        ficha, fx, fy = rf.guardar_capa(rf.placa_ficha(d, marca), os.path.join(tmp, "ficha.png"))
         entradas += ["-loop", "1", "-t", f"{total:.3f}", "-i", ficha]
         filtros.append(f"[{n}:v]format=rgba,fade=in:st=0.15:d=0.5:alpha=1[p]")
-        filtros.append(f"{cadena}[p]overlay=0:0[c1]")
+        filtros.append(f"{cadena}[p]overlay={fx}:{fy}[c1]")
     else:  # portada solo al principio
         portada = os.path.join(tmp, "portada.png")
         rf.placa_portada(d, marca).save(portada)
@@ -278,11 +277,10 @@ def capas_finales(video, d, marca, subs_ass, tmp, salida):
     cadena, n = "[c1]", n + 1
     logo = d.get("logo")
     if d.get("logo_pie", True) and logo and os.path.exists(logo):
-        pie = os.path.join(tmp, "pie.png")
-        rf.placa_pie_logo(logo).save(pie)
+        pie, px, py = rf.guardar_capa(rf.placa_pie_logo(logo), os.path.join(tmp, "pie.png"))
         entradas += ["-loop", "1", "-t", f"{total:.3f}", "-i", pie]
         filtros.append(f"[{n}:v]format=rgba[l]")
-        filtros.append(f"{cadena}[l]overlay=0:0:enable='lt(t,{total - CIERRE:.3f})'[c2]")
+        filtros.append(f"{cadena}[l]overlay={px}:{py}:enable='lt(t,{total - CIERRE:.3f})'[c2]")
         cadena, n = "[c2]", n + 1
     if subs_ass:
         ruta = subs_ass.replace("\\", "/").replace(":", "\\:")
@@ -291,7 +289,7 @@ def capas_finales(video, d, marca, subs_ass, tmp, salida):
     filtros.append(f"{cadena}format=yuv420p[v]")
     rf.run(["ffmpeg", "-y", "-v", "error", *entradas, "-filter_complex", ";".join(filtros),
             "-map", "[v]", "-map", "0:a", "-t", f"{total:.3f}", "-c:v", "libx264",
-            "-preset", "medium", "-crf", "20", "-c:a", "copy", salida])
+            "-preset", "veryfast", "-crf", "20", "-c:a", "copy", salida])
 
 
 def mezclar(video, musica, con_voz, salida):
